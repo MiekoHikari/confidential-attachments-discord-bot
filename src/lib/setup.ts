@@ -26,6 +26,9 @@ colorette.createColors({ useColor: true });
 
 declare module '@skyra/env-utilities' {
 	interface Env {
-		// Add as we need
+		// Appwrite Tokens
+		APPWRITE_ENDPOINT: string;
+		APPWRITE_PROJECT_ID: string;
+		APPWRITE_API_KEY: string;
 	}
 }
