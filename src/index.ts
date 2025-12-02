@@ -1,6 +1,7 @@
+import { createAppwriteClient } from '#lib/utils';
 import './lib/setup';
 
-import { LogLevel, SapphireClient } from '@sapphire/framework';
+import { container, LogLevel, SapphireClient } from '@sapphire/framework';
 // import { GatewayIntentBits, Partials } from 'discord.js'; 
 
 const client = new SapphireClient({
@@ -17,6 +18,8 @@ const client = new SapphireClient({
 
 const main = async () => {
 	try {
+		container.appwrite = createAppwriteClient();
+
 		client.logger.info('Logging in to Discord... 🔑');
 		await client.login();
 		client.logger.info('Logged in to Discord successfully! ✅');
@@ -26,5 +29,11 @@ const main = async () => {
 		process.exit(1);
 	}
 };
+
+declare module '@sapphire/framework' {
+	interface Container {
+		appwrite: ReturnType<typeof createAppwriteClient>;
+	}
+}
 
 void main();

@@ -1,9 +1,12 @@
 import type { ChatInputCommandSuccessPayload, Command, ContextMenuCommandSuccessPayload, MessageCommandSuccessPayload } from '@sapphire/framework';
-import { container } from '@sapphire/framework';
+import { container, UserError } from '@sapphire/framework';
 import { send } from '@sapphire/plugin-editable-commands';
 import { cyan } from 'colorette';
 import { EmbedBuilder, type APIUser, type Guild, type Message, type User } from 'discord.js';
 import { RandomLoadingMessage } from './constants';
+import { ErrorCodes, generateFailure } from './messages';
+
+import { Client } from 'node-appwrite'
 
 /**
  * Picks a random item from an array
@@ -60,4 +63,20 @@ function getAuthorInfo(author: User | APIUser) {
 function getGuildInfo(guild: Guild | null) {
 	if (guild === null) return 'Direct Messages';
 	return `${guild.name}[${cyan(guild.id)}]`;
+}
+
+/**
+ * This function creates an Appwrite client.
+ */
+export function createAppwriteClient() {
+	if (!process.env.APPWRITE_ENDPOINT || !process.env.APPWRITE_PROJECT_ID || !process.env.APPWRITE_API_KEY) {
+		throw new UserError(generateFailure(ErrorCodes.EnvironmentConfigurationError));
+	} else {
+		const client = new Client()
+
+		return client
+			.setEndpoint(process.env.APPWRITE_ENDPOINT) // Your API Endpoint
+			.setProject(process.env.APPWRITE_PROJECT_ID) // Your project ID
+			.setKey(process.env.APPWRITE_API_KEY); // Your secret API key
+	}
 }
