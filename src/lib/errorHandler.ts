@@ -1,5 +1,3 @@
-import { UserError } from '@sapphire/framework';
-
 // error codes
 export const ErrorCodes = {
 	UploadFailed: 'E001',
