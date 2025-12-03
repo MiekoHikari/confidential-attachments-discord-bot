@@ -183,7 +183,14 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 			'-i',
 			watermarkPath,
 			'-filter_complex',
-			'overlay=0:0',
+			// Convert both streams to compatible pixel format before overlay, then output as yuv420p for max compatibility
+			'[0:v]format=yuva420p[base];[1:v]format=yuva420p[ovr];[base][ovr]overlay=0:0,format=yuv420p',
+			'-c:v',
+			'libx264',
+			'-preset',
+			'fast',
+			'-crf',
+			'23',
 			'-c:a',
 			'copy',
 			'-y', // Overwrite output file

@@ -1,14 +1,18 @@
 import { FailureContext } from '#lib/errorHandler';
-import { ChatInputCommandDeniedPayload, Events, Listener, UserError } from '@sapphire/framework';
+import { ChatInputCommandErrorPayload, Events, Listener, UserError } from '@sapphire/framework';
 import { EmbedBuilder } from 'discord.js';
 
-export class UserEvent extends Listener<typeof Events.ChatInputCommandDenied> {
-	public override async run(error: UserError, { interaction }: ChatInputCommandDeniedPayload) {
-		const { message: content, identifier } = error;
-		const context = error.context as FailureContext;
+export class UserEvent extends Listener<typeof Events.ChatInputCommandError> {
+	public override async run(error: Error, { interaction }: ChatInputCommandErrorPayload) {
+		// Check if it's a UserError with context
+		const isUserError = error instanceof UserError;
+		const context = isUserError ? (error.context as FailureContext | undefined) : undefined;
 
 		// Silent errors
-		if (context.silent) return;
+		if (context?.silent) return;
+
+		const content = error.message;
+		const identifier = isUserError ? error.identifier : 'UNKNOWN_ERROR';
 
 		const failureEmbed = new EmbedBuilder()
 			.setDescription('# Command Failed!\n' + `> ${content}`)
@@ -19,7 +23,9 @@ export class UserEvent extends Listener<typeof Events.ChatInputCommandDenied> {
 
 		if (context) {
 			for (const [key, value] of Object.entries(context)) {
-				failureEmbed.addFields({ name: `Context: ${key}`, value: `\`\`\`${String(value)}\`\`\`` });
+				if (key !== 'silent') {
+					failureEmbed.addFields({ name: `Context: ${key}`, value: `\`\`\`${String(value)}\`\`\`` });
+				}
 			}
 		}
 
