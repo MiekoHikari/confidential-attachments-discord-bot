@@ -1,6 +1,7 @@
 import { createCanvas, loadImage } from 'canvas';
 import { execFile } from 'child_process';
 import ffmpeg from 'ffmpeg-static';
+import ffprobeStatic from 'ffprobe-static';
 import { promises as fs } from 'fs';
 import * as https from 'https';
 import * as http from 'http';
@@ -114,9 +115,12 @@ function createWatermarkBuffer(width: number, height: number, watermark: string)
 	const textWidth = Math.max(...lines.map((line) => ctx.measureText(line).width));
 	const textHeight = lines.length * lineHeight;
 
-	// Random position ensuring the watermark stays within visible bounds
-	const randomX = Math.random() * (width - textWidth);
-	const randomY = Math.random() * (height - textHeight) + lineHeight;
+	// Padding from edges
+	const padding = 20;
+
+	// Random position ensuring the watermark stays within visible bounds (center area)
+	const randomX = padding + Math.random() * (width - textWidth - 2 * padding);
+	const randomY = padding + textHeight + Math.random() * (height - 2 * textHeight - 2 * padding);
 
 	lines.forEach((line, i) => {
 		const drawY = randomY + i * lineHeight;
@@ -147,39 +151,42 @@ async function watermarkImage(imageUrl: string, watermark: string): Promise<Buff
 }
 
 async function getVideoDimensions(localVideoPath: string): Promise<{ width: number; height: number }> {
-	const ffmpegPath = ffmpeg;
-	if (!ffmpegPath) throw new UserError(generateFailure(ErrorCodes.FfmpegNotFound));
+	const ffprobePath = ffprobeStatic.path;
+	if (!ffprobePath) throw new UserError(generateFailure(ErrorCodes.FfmpegNotFound));
 
 	try {
-		// ffmpeg always exits with error when just reading input info, so we catch it
-		await execFileAsync(ffmpegPath, ['-i', localVideoPath, '-f', 'null', '-']);
-		// If somehow it succeeds without output, return default
-		return { width: 1280, height: 720 };
-	} catch (error: any) {
-		const stderr = error.stderr || '';
+		// Use ffprobe to get video dimensions in JSON format
+		const { stdout } = await execFileAsync(ffprobePath, [
+			'-v',
+			'error',
+			'-select_streams',
+			'v:0',
+			'-show_entries',
+			'stream=width,height',
+			'-of',
+			'json',
+			localVideoPath
+		]);
 
-		// Try multiple regex patterns to match different ffmpeg output formats
-		const patterns = [
-			/(\d{2,5})x(\d{2,5})(?:\s|,|\[|$)/, // Simple WxH pattern
-			/Video:.+?(\d{2,5})x(\d{2,5})/, // Video: ... WxH
-			/, (\d{2,5})x(\d{2,5})[\s,\[]/ // comma space WxH
-		];
+		const probeData = JSON.parse(stdout);
 
-		for (const pattern of patterns) {
-			const match = pattern.exec(stderr);
-			if (match) {
-				const width = parseInt(match[1]);
-				const height = parseInt(match[2]);
-				// Sanity check - dimensions should be reasonable
-				if (width >= 16 && width <= 7680 && height >= 16 && height <= 4320) {
-					return { width, height };
-				}
+		if (probeData.streams && probeData.streams.length > 0) {
+			const { width, height } = probeData.streams[0];
+			if (typeof width === 'number' && typeof height === 'number' && width >= 16 && width <= 7680 && height >= 16 && height <= 4320) {
+				return { width, height };
 			}
 		}
 
-		// Log the stderr for debugging
-		console.error('FFmpeg stderr output:', stderr);
-		throw new Error(`Could not determine video dimensions. FFmpeg output: ${stderr.slice(0, 500)}`);
+		throw new Error('Could not extract valid video dimensions from ffprobe output');
+	} catch (error: any) {
+		// If it's already a parsed error with a message, rethrow
+		if (error.message && !error.stderr) {
+			throw error;
+		}
+
+		const stderr = error.stderr || '';
+		console.error('FFprobe error:', stderr);
+		throw new Error(`Could not determine video dimensions. FFprobe output: ${stderr.slice(0, 500)}`);
 	}
 }
 
@@ -207,8 +214,7 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 			'-i',
 			watermarkPath,
 			'-filter_complex',
-			// Convert both streams to compatible pixel format before overlay, then output as yuv420p for max compatibility
-			'[0:v]format=yuva420p[base];[1:v]format=yuva420p[ovr];[base][ovr]overlay=0:0,format=yuv420p',
+			'[0:v][1:v]overlay=0:0:format=auto,format=yuv420p',
 			'-c:v',
 			'libx264',
 			'-preset',
