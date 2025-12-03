@@ -75,7 +75,7 @@ function createWatermarkBuffer(width: number, height: number, watermark: string)
 	const ctx = canvas.getContext('2d');
 
 	// More legible: higher opacity, larger font, and text outline
-	ctx.font = 'bold 36px sans-serif';
+	ctx.font = 'bold 24px sans-serif';
 	ctx.textBaseline = 'middle';
 
 	// Rotate context
