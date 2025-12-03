@@ -212,6 +212,14 @@ export class UserCommand extends Command {
 
 			let stderrData = '';
 			let stdoutData = '';
+			let settled = false;
+
+			const settle = (fn: () => void) => {
+				if (!settled) {
+					settled = true;
+					fn();
+				}
+			};
 
 			// Capture stderr for debugging
 			if (child.stderr) {
@@ -229,22 +237,26 @@ export class UserCommand extends Command {
 
 			child.on('message', (result: WorkerResult) => {
 				if (result.success && result.buffer) {
-					resolve(Buffer.from(result.buffer, 'base64'));
+					settle(() => resolve(Buffer.from(result.buffer!, 'base64')));
 				} else {
-					reject(new Error(result.error || 'Unknown worker error'));
+					settle(() => reject(new Error(result.error || 'Unknown worker error')));
 				}
 				child.kill();
 			});
 
 			child.on('error', (error) => {
-				reject(error);
+				settle(() => reject(error));
 				child.kill();
 			});
 
-			child.on('exit', (code) => {
-				if (code !== 0 && code !== null) {
+			child.on('exit', (code, signal) => {
+				if (!settled) {
 					const errorDetails = stderrData || stdoutData || 'No additional error output';
-					reject(new Error(`Worker process exited with code ${code}. Details: ${errorDetails}`));
+					if (signal) {
+						settle(() => reject(new Error(`Worker killed by signal ${signal}. Details: ${errorDetails}`)));
+					} else if (code !== 0) {
+						settle(() => reject(new Error(`Worker exited with code ${code}. Details: ${errorDetails}`)));
+					}
 				}
 			});
 

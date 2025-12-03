@@ -203,7 +203,7 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 	const outputPath = path.join(tempDir, `output-${id}.mp4`);
 
 	try {
-		// Download the video file first (ffmpeg-static on Linux may not support HTTPS URLs)
+		// Download the video file first
 		await downloadFile(videoUrl, inputPath);
 
 		// Get dimensions from local file
@@ -222,26 +222,32 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 			'-c:v',
 			'libx264',
 			'-preset',
-			'fast',
+			'ultrafast', // Use ultrafast to reduce memory usage
 			'-crf',
 			'23',
 			'-c:a',
 			'copy',
+			'-threads',
+			'1', // Limit threads to reduce memory usage
 			outputPath
 		];
 
 		// Use spawn instead of execFile for better streaming and no buffer limits
 		await new Promise<void>((resolve, reject) => {
-			const ffmpegProcess = spawn(ffmpegPath, args);
+			const ffmpegProcess = spawn(ffmpegPath, args, {
+				stdio: ['ignore', 'pipe', 'pipe']
+			});
 			let stderrOutput = '';
 
 			ffmpegProcess.stderr.on('data', (data) => {
 				stderrOutput += data.toString();
 			});
 
-			ffmpegProcess.on('close', (code) => {
+			ffmpegProcess.on('close', (code, signal) => {
 				if (code === 0) {
 					resolve();
+				} else if (signal) {
+					reject(new WorkerError(`FFmpeg killed by signal ${signal}: ${stderrOutput.slice(-1000)}`));
 				} else {
 					reject(new WorkerError(`FFmpeg exited with code ${code}: ${stderrOutput.slice(-1000)}`));
 				}
