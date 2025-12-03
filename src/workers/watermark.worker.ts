@@ -90,8 +90,9 @@ function createWatermarkBuffer(width: number, height: number, watermark: string)
 	const stepY = 180; // Vertical spacing between tiles
 
 	const lines = watermark.split('\n');
-	const lineHeight = 42;
+	const lineHeight = 42 / 2;
 
+	// First layer: Original white watermark
 	for (let y = -diagonal; y < diagonal; y += stepY) {
 		for (let x = -diagonal; x < diagonal; x += stepX) {
 			lines.forEach((line, i) => {
@@ -106,6 +107,27 @@ function createWatermarkBuffer(width: number, height: number, watermark: string)
 			});
 		}
 	}
+
+	ctx.resetTransform();
+
+	// Calculate text dimensions for proper positioning
+	const textWidth = Math.max(...lines.map((line) => ctx.measureText(line).width));
+	const textHeight = lines.length * lineHeight;
+
+	// Random position ensuring the watermark stays within visible bounds
+	const randomX = Math.random() * (width - textWidth);
+	const randomY = Math.random() * (height - textHeight) + lineHeight;
+
+	lines.forEach((line, i) => {
+		const drawY = randomY + i * lineHeight;
+		// Draw dark outline for contrast
+		ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+		ctx.lineWidth = 3;
+		ctx.strokeText(line, randomX, drawY);
+		// Draw teal fill with high opacity
+		ctx.fillStyle = 'rgba(0, 255, 255, 0.70)';
+		ctx.fillText(line, randomX, drawY);
+	});
 
 	return canvas.toBuffer();
 }
