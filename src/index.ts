@@ -2,7 +2,7 @@ import { createAppwriteClient } from '#lib/utils';
 import './lib/setup';
 
 import { container, LogLevel, SapphireClient } from '@sapphire/framework';
-// import { GatewayIntentBits, Partials } from 'discord.js'; 
+// import { GatewayIntentBits, Partials } from 'discord.js';
 
 const client = new SapphireClient({
 	logger: {
@@ -13,7 +13,7 @@ const client = new SapphireClient({
 	],
 	partials: [
 		// Build as we code
-	],
+	]
 });
 
 const main = async () => {
