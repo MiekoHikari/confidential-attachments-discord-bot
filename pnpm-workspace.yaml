@@ -1,3 +1,5 @@
 onlyBuiltDependencies:
   - '@sapphire/type'
   - '@swc/core'
+  - canvas
+  - ffmpeg-static
