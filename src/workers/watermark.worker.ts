@@ -212,6 +212,8 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 		await fs.writeFile(watermarkPath, watermarkBuffer);
 
 		const args = [
+			'-loglevel',
+			'error', // Reduce ffmpeg output to only errors
 			'-i',
 			inputPath,
 			'-i',
@@ -230,7 +232,8 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 			outputPath
 		];
 
-		await execFileAsync(ffmpegPath, args);
+		// Increase maxBuffer to handle larger ffmpeg output
+		await execFileAsync(ffmpegPath, args, { maxBuffer: 50 * 1024 * 1024 });
 
 		const outputBuffer = await fs.readFile(outputPath);
 		return outputBuffer;
