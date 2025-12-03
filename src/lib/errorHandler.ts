@@ -1,4 +1,4 @@
-import { UserError } from "@sapphire/framework";
+import { UserError } from '@sapphire/framework';
 
 // error codes
 export const ErrorCodes = {
@@ -40,12 +40,3 @@ export function generateFailure(code: ErrorCode, context?: FailureContext) {
 		context: context ?? {}
 	};
 }
-
-export function handleError(eval: () => void) {
-	try {
-		eval();
-	} catch (error) {
-		if (error instanceof UserError) {
-			
-		}
-	}
