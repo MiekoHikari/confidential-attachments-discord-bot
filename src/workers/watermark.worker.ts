@@ -1,5 +1,5 @@
 import { createCanvas, loadImage } from 'canvas';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import * as https from 'https';
 import * as http from 'http';
@@ -212,8 +212,7 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 		await fs.writeFile(watermarkPath, watermarkBuffer);
 
 		const args = [
-			'-loglevel',
-			'error', // Reduce ffmpeg output to only errors
+			'-y', // Overwrite output file (put first to avoid prompts)
 			'-i',
 			inputPath,
 			'-i',
@@ -228,12 +227,30 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 			'23',
 			'-c:a',
 			'copy',
-			'-y', // Overwrite output file
 			outputPath
 		];
 
-		// Increase maxBuffer to handle larger ffmpeg output
-		await execFileAsync(ffmpegPath, args, { maxBuffer: 50 * 1024 * 1024 });
+		// Use spawn instead of execFile for better streaming and no buffer limits
+		await new Promise<void>((resolve, reject) => {
+			const ffmpegProcess = spawn(ffmpegPath, args);
+			let stderrOutput = '';
+
+			ffmpegProcess.stderr.on('data', (data) => {
+				stderrOutput += data.toString();
+			});
+
+			ffmpegProcess.on('close', (code) => {
+				if (code === 0) {
+					resolve();
+				} else {
+					reject(new WorkerError(`FFmpeg exited with code ${code}: ${stderrOutput.slice(-1000)}`));
+				}
+			});
+
+			ffmpegProcess.on('error', (err) => {
+				reject(new WorkerError(`FFmpeg spawn error: ${err.message}`));
+			});
+		});
 
 		const outputBuffer = await fs.readFile(outputPath);
 		return outputBuffer;
