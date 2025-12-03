@@ -1,4 +1,4 @@
-import { ErrorCodes, generateFailure } from '#lib/messages';
+import { ErrorCodes, generateFailure } from '#lib/errorHandler';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
 import { Attachment } from 'discord.js';
@@ -7,6 +7,7 @@ import { Attachment } from 'discord.js';
 const validImageTypes = ['image/jpeg', 'image/png', 'image/gif'];
 const validVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-matroska'];
 const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mov', '.mkv'];
+const maxFileSizeInBytes = 512 * 1024 * 1024;
 
 @ApplyOptions<Command.Options>({
 	description: 'Upload images/videos as confidential attachments',
@@ -82,17 +83,26 @@ export class UserCommand extends Command {
 	}
 
 	public override async chatInputRun(interaction: Command.ChatInputCommandInteraction) {
+		await interaction.deferReply({ flags: ['Ephemeral'] });
+
 		// Get attachments
 		const attachments = this.extractAttachmentsFromInteraction(interaction);
-
 		const validTypes = [...validImageTypes, ...validVideoTypes];
-		const validAttachments = this.validateAttachments(attachments, validTypes);
 
-		if (validAttachments.length === 0) {
-			throw new UserError(generateFailure(ErrorCodes.InvalidFileType, { 'Expected File Types': validTypes }));
+		// Validation
+		const attachmentErrors = this.validateAttachments(attachments, validTypes, maxFileSizeInBytes);
+
+		if (attachmentErrors.length > 0) {
+			throw new UserError(generateFailure(ErrorCodes.UploadFailed, { errors: attachmentErrors }));
 		}
 
-		return interaction.reply({ content: 'Hello world!' });
+		// Simulate uploading
+		for (const [index] of attachments.entries()) {
+			await interaction.editReply(`Uploading file: ${index + 1} / ${attachments.length}...`);
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+		}
+
+		return interaction.editReply({ content: 'Upload Complete!' });
 	}
 
 	private extractAttachmentsFromInteraction(interaction: Command.ChatInputCommandInteraction): Attachment[] {
@@ -106,8 +116,27 @@ export class UserCommand extends Command {
 		return attachments;
 	}
 
-	private validateAttachments(attachments: Attachment[], validTypes: string[]): Attachment[] {
-		return attachments.filter((attachment) => this.validateFileType(attachment, validTypes));
+	private validateAttachments(attachments: Attachment[], validTypes: string[], maxSizeInBytes: number): UserError[] {
+		const errors: UserError[] = [];
+
+		// 1. Check file types
+		const invalidTypeAttachments = attachments.filter((attachment) => !this.validateFileType(attachment, validTypes));
+		if (invalidTypeAttachments.length > 0) {
+			errors.push(new UserError(generateFailure(ErrorCodes.InvalidFileType, { invalidFiles: invalidTypeAttachments.map((a) => a.name) })));
+		}
+
+		const oversizedAttachments = attachments.filter((attachment) => !this.validateFileSize(attachment, maxSizeInBytes));
+		if (oversizedAttachments.length > 0) {
+			errors.push(
+				new UserError(
+					generateFailure(ErrorCodes.FileTooLarge, {
+						oversizedFiles: oversizedAttachments.map((a) => a.name)
+					})
+				)
+			);
+		}
+
+		return errors;
 	}
 
 	private validateFileType(attachment: Attachment, validTypes: string[]): boolean {
@@ -119,5 +148,9 @@ export class UserCommand extends Command {
 		}
 
 		return validTypes.includes(attachment.contentType || '');
+	}
+
+	private validateFileSize(attachment: Attachment, maxSizeInBytes: number): boolean {
+		return attachment.size <= maxSizeInBytes;
 	}
 }

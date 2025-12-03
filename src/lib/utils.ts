@@ -4,9 +4,9 @@ import { send } from '@sapphire/plugin-editable-commands';
 import { cyan } from 'colorette';
 import { EmbedBuilder, type APIUser, type Guild, type Message, type User } from 'discord.js';
 import { RandomLoadingMessage } from './constants';
-import { ErrorCodes, generateFailure } from './messages';
+import { ErrorCodes, generateFailure } from './errorHandler';
 
-import { Client } from 'node-appwrite'
+import { Client } from 'node-appwrite';
 
 /**
  * Picks a random item from an array
@@ -72,7 +72,7 @@ export function createAppwriteClient() {
 	if (!process.env.APPWRITE_ENDPOINT || !process.env.APPWRITE_PROJECT_ID || !process.env.APPWRITE_API_KEY) {
 		throw new UserError(generateFailure(ErrorCodes.EnvironmentConfigurationError));
 	} else {
-		const client = new Client()
+		const client = new Client();
 
 		return client
 			.setEndpoint(process.env.APPWRITE_ENDPOINT) // Your API Endpoint
