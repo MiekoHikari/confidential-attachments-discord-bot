@@ -210,6 +210,23 @@ export class UserCommand extends Command {
 				stdio: ['pipe', 'pipe', 'pipe', 'ipc']
 			});
 
+			let stderrData = '';
+			let stdoutData = '';
+
+			// Capture stderr for debugging
+			if (child.stderr) {
+				child.stderr.on('data', (data) => {
+					stderrData += data.toString();
+				});
+			}
+
+			// Capture stdout for debugging
+			if (child.stdout) {
+				child.stdout.on('data', (data) => {
+					stdoutData += data.toString();
+				});
+			}
+
 			child.on('message', (result: WorkerResult) => {
 				if (result.success && result.buffer) {
 					resolve(Buffer.from(result.buffer, 'base64'));
@@ -226,7 +243,8 @@ export class UserCommand extends Command {
 
 			child.on('exit', (code) => {
 				if (code !== 0 && code !== null) {
-					reject(new Error(`Worker process exited with code ${code}`));
+					const errorDetails = stderrData || stdoutData || 'No additional error output';
+					reject(new Error(`Worker process exited with code ${code}. Details: ${errorDetails}`));
 				}
 			});
 

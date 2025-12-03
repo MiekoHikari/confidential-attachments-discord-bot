@@ -267,8 +267,59 @@ async function processTask(task: WatermarkTask): Promise<WorkerResult> {
 	}
 }
 
-// Listen for messages from parent process
-process.on('message', async (task: WatermarkTask) => {
-	const result = await processTask(task);
-	process.send!(result);
-});
+// Wrap the entire worker initialization in try-catch to catch any startup errors
+try {
+	// Verify required dependencies are available at startup
+	if (!ffmpeg) {
+		console.error('Worker Error: FFmpeg binary not found');
+		process.exit(1);
+	}
+
+	if (!ffprobeStatic.path) {
+		console.error('Worker Error: FFprobe binary not found');
+		process.exit(1);
+	}
+
+	// Listen for messages from parent process
+	process.on('message', async (task: WatermarkTask) => {
+		try {
+			const result = await processTask(task);
+			if (process.send) {
+				process.send(result);
+			}
+		} catch (error) {
+			console.error('Worker message handling error:', error);
+			if (process.send) {
+				process.send({
+					success: false,
+					error: error instanceof Error ? error.message : String(error)
+				});
+			}
+		}
+	});
+
+	// Handle uncaught errors in the worker
+	process.on('uncaughtException', (error) => {
+		console.error('Worker uncaught exception:', error);
+		if (process.send) {
+			process.send({
+				success: false,
+				error: error instanceof Error ? error.message : String(error)
+			});
+		}
+		process.exit(1);
+	});
+
+	process.on('unhandledRejection', (reason) => {
+		console.error('Worker unhandled rejection:', reason);
+		if (process.send) {
+			process.send({
+				success: false,
+				error: reason instanceof Error ? reason.message : String(reason)
+			});
+		}
+	});
+} catch (error) {
+	console.error('Worker initialization error:', error);
+	process.exit(1);
+}
