@@ -7,6 +7,8 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
+import { UserError } from '@sapphire/framework';
+import { ErrorCodes, generateFailure } from '#lib/errorHandler';
 
 const execFileAsync = promisify(execFile);
 
@@ -52,7 +54,7 @@ async function downloadFile(url: string, destPath: string): Promise<void> {
 
 				if (response.statusCode !== 200) {
 					file.close();
-					reject(new Error(`Failed to download: HTTP ${response.statusCode}`));
+					reject(new UserError(generateFailure(ErrorCodes.DownloadError, { statusCode: response.statusCode })));
 					return;
 				}
 
@@ -124,7 +126,7 @@ async function watermarkImage(imageUrl: string, watermark: string): Promise<Buff
 
 async function getVideoDimensions(localVideoPath: string): Promise<{ width: number; height: number }> {
 	const ffmpegPath = ffmpeg;
-	if (!ffmpegPath) throw new Error('FFmpeg not found');
+	if (!ffmpegPath) throw new UserError(generateFailure(ErrorCodes.FfmpegNotFound));
 
 	try {
 		// ffmpeg always exits with error when just reading input info, so we catch it
@@ -160,7 +162,7 @@ async function getVideoDimensions(localVideoPath: string): Promise<{ width: numb
 }
 
 async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buffer> {
-	if (!ffmpeg) throw new Error('FFmpeg not found');
+	if (!ffmpeg) throw new UserError(generateFailure(ErrorCodes.FfmpegNotFound));
 
 	const tempDir = os.tmpdir();
 	const id = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -226,7 +228,7 @@ async function processTask(task: WatermarkTask): Promise<WorkerResult> {
 	} catch (error) {
 		return {
 			success: false,
-			error: error instanceof Error ? error.message : String(error)
+			error: error instanceof UserError ? error.message : error instanceof Error ? error.message : String(error)
 		};
 	}
 }

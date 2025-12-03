@@ -9,7 +9,8 @@ export const ErrorCodes = {
 	PeriodNotStarted: 'E006',
 	EnvironmentConfigurationError: 'E007',
 
-	FfmpegNotFound: 'E008'
+	FfmpegNotFound: 'E008',
+	DownloadError: 'E009'
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
@@ -22,7 +23,8 @@ export const ErrorMessages: Record<ErrorCode, string> = {
 	[ErrorCodes.InternalError]: 'Something went wrong internally.',
 	[ErrorCodes.PeriodNotStarted]: 'The confidential period has not started yet.',
 	[ErrorCodes.EnvironmentConfigurationError]: 'The environment variable is not configured properly: ',
-	[ErrorCodes.FfmpegNotFound]: 'FFmpeg is not installed or not found in the system path.'
+	[ErrorCodes.FfmpegNotFound]: 'FFmpeg is not installed or not found in the system path.',
+	[ErrorCodes.DownloadError]: 'Failed to download the file from the provided URL.'
 };
 
 export function getErrorMessage(code: ErrorCode): string {
