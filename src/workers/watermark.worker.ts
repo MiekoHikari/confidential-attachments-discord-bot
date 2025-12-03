@@ -1,13 +1,15 @@
 import { createCanvas, loadImage } from 'canvas';
 import { execFile } from 'child_process';
-import ffmpeg from 'ffmpeg-static';
-import ffprobeStatic from 'ffprobe-static';
 import { promises as fs } from 'fs';
 import * as https from 'https';
 import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
+
+// Use system-installed ffmpeg/ffprobe binaries
+const ffmpegPath = 'ffmpeg';
+const ffprobePath = 'ffprobe';
 
 // Worker-specific error class (self-contained, no external dependencies)
 class WorkerError extends Error {
@@ -157,9 +159,6 @@ async function watermarkImage(imageUrl: string, watermark: string): Promise<Buff
 }
 
 async function getVideoDimensions(localVideoPath: string): Promise<{ width: number; height: number }> {
-	const ffprobePath = ffprobeStatic.path;
-	if (!ffprobePath) throw new WorkerError('FFprobe is not installed or not found in the system path');
-
 	try {
 		// Use ffprobe to get video dimensions in JSON format
 		const { stdout } = await execFileAsync(ffprobePath, [
@@ -197,8 +196,6 @@ async function getVideoDimensions(localVideoPath: string): Promise<{ width: numb
 }
 
 async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buffer> {
-	if (!ffmpeg) throw new WorkerError('FFmpeg is not installed or not found in the system path');
-
 	const tempDir = os.tmpdir();
 	const id = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
 	const inputPath = path.join(tempDir, `input-${id}.mp4`);
@@ -233,7 +230,7 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 			outputPath
 		];
 
-		await execFileAsync(ffmpeg, args);
+		await execFileAsync(ffmpegPath, args);
 
 		const outputBuffer = await fs.readFile(outputPath);
 		return outputBuffer;
@@ -268,18 +265,8 @@ async function processTask(task: WatermarkTask): Promise<WorkerResult> {
 }
 
 // Wrap the entire worker initialization in try-catch to catch any startup errors
+// Wrap the entire worker initialization in try-catch to catch any startup errors
 try {
-	// Verify required dependencies are available at startup
-	if (!ffmpeg) {
-		console.error('Worker Error: FFmpeg binary not found');
-		process.exit(1);
-	}
-
-	if (!ffprobeStatic.path) {
-		console.error('Worker Error: FFprobe binary not found');
-		process.exit(1);
-	}
-
 	// Listen for messages from parent process
 	process.on('message', async (task: WatermarkTask) => {
 		try {
