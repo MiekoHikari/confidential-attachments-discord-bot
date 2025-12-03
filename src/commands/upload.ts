@@ -1,9 +1,11 @@
 import { ErrorCodes, generateFailure } from '#lib/errorHandler';
 import { generateId, PerformanceMonitor } from '#lib/utils';
+import { cleanupFile, watermarkVideoToFile } from '#lib/videoProcessor';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
 import { fork, type ChildProcess } from 'child_process';
 import { Attachment, AttachmentBuilder } from 'discord.js';
+import { createReadStream } from 'fs';
 import * as path from 'path';
 
 // Discord Supported file types
@@ -111,34 +113,47 @@ export class UserCommand extends Command {
 			}
 
 			const processedFiles: AttachmentBuilder[] = [];
+			const tempFilesToCleanup: string[] = [];
 			const watermarkText = generateId(6);
 
-			// Process files
-			for (const [index, attachment] of attachments.entries()) {
-				await interaction.editReply(`Processing file: ${index + 1} / ${attachments.length}...`);
+			try {
+				// Process files
+				for (const [index, attachment] of attachments.entries()) {
+					await interaction.editReply(`Processing file: ${index + 1} / ${attachments.length}...`);
 
-				let processedBuffer: Buffer;
+					if (validImageTypes.includes(attachment.contentType!)) {
+						// Images: use worker (small memory footprint)
+						const processedBuffer = await this.watermarkImage(attachment.url, watermarkText);
+						processedFiles.push(new AttachmentBuilder(processedBuffer, { name: `confidential-${attachment.name}` }));
+					} else {
+						// Videos: process directly without worker, use file stream
+						const outputPath = await watermarkVideoToFile(attachment.url, watermarkText);
+						tempFilesToCleanup.push(outputPath);
 
-				if (validImageTypes.includes(attachment.contentType!)) {
-					processedBuffer = await this.watermarkImage(attachment.url, watermarkText);
-				} else {
-					processedBuffer = await this.watermarkVideo(attachment.url, watermarkText);
+						// Use file stream instead of loading entire file into memory
+						processedFiles.push(new AttachmentBuilder(createReadStream(outputPath), { name: `confidential-${attachment.name}` }));
+					}
 				}
 
-				processedFiles.push(new AttachmentBuilder(processedBuffer, { name: `confidential-${attachment.name}` }));
+				// Stop monitoring and get report
+				const perfReport = perfMonitor.stop();
+				const perfSummary = PerformanceMonitor.getCompactSummary(perfReport);
+
+				// Log detailed performance report to console
+				this.container.logger.info(`[Upload Command] Performance:\n${PerformanceMonitor.formatReport(perfReport)}`);
+
+				const result = await interaction.editReply({
+					content: `✅ Upload Complete!\n\n${perfSummary}`,
+					files: processedFiles
+				});
+
+				return result;
+			} finally {
+				// Always cleanup temp files
+				for (const filePath of tempFilesToCleanup) {
+					await cleanupFile(filePath);
+				}
 			}
-
-			// Stop monitoring and get report
-			const perfReport = perfMonitor.stop();
-			const perfSummary = PerformanceMonitor.getCompactSummary(perfReport);
-
-			// Log detailed performance report to console
-			this.container.logger.info(`[Upload Command] Performance:\n${PerformanceMonitor.formatReport(perfReport)}`);
-
-			return interaction.editReply({
-				content: `✅ Upload Complete!\n\n${perfSummary}`,
-				files: processedFiles
-			});
 		} catch (error) {
 			// Stop monitoring even on error
 			const perfReport = perfMonitor.stop();
@@ -267,9 +282,5 @@ export class UserCommand extends Command {
 
 	private async watermarkImage(imageUrl: string, watermark: string): Promise<Buffer> {
 		return this.runWatermarkWorker({ type: 'image', imageUrl, watermark });
-	}
-
-	private async watermarkVideo(videoUrl: string, watermark: string): Promise<Buffer> {
-		return this.runWatermarkWorker({ type: 'video', videoUrl, watermark });
 	}
 }
