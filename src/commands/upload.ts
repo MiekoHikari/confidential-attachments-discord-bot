@@ -2,22 +2,21 @@ import { ErrorCodes, generateFailure } from '#lib/errorHandler';
 import { generateId, PerformanceMonitor } from '#lib/utils';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
-import { createCanvas, loadImage } from 'canvas';
-import { execFile } from 'child_process';
+import { fork, type ChildProcess } from 'child_process';
 import { Attachment, AttachmentBuilder } from 'discord.js';
-import ffmpeg from 'ffmpeg-static';
-import { promises as fs } from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { promisify } from 'util';
-
-const execFileAsync = promisify(execFile);
 
 // Discord Supported file types
 const validImageTypes = ['image/jpeg', 'image/png', 'image/gif'];
 const validVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-matroska'];
 const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mov', '.mkv'];
 const maxFileSizeInBytes = 512 * 1024 * 1024;
+
+interface WorkerResult {
+	success: boolean;
+	buffer?: string; // Base64 encoded
+	error?: string;
+}
 
 @ApplyOptions<Command.Options>({
 	description: 'Upload images/videos as confidential attachments',
@@ -197,110 +196,50 @@ export class UserCommand extends Command {
 		return attachment.size <= maxSizeInBytes;
 	}
 
+	/**
+	 * Run watermarking in a separate child process to avoid blocking the main event loop
+	 */
+	private runWatermarkWorker(
+		task: { type: 'image'; imageUrl: string; watermark: string } | { type: 'video'; videoUrl: string; watermark: string }
+	): Promise<Buffer> {
+		return new Promise((resolve, reject) => {
+			// Resolve the worker path - in production it will be compiled to JS
+			const workerPath = path.resolve(__dirname, '../workers/watermark.worker.js');
+
+			const child: ChildProcess = fork(workerPath, [], {
+				stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+			});
+
+			child.on('message', (result: WorkerResult) => {
+				if (result.success && result.buffer) {
+					resolve(Buffer.from(result.buffer, 'base64'));
+				} else {
+					reject(new Error(result.error || 'Unknown worker error'));
+				}
+				child.kill();
+			});
+
+			child.on('error', (error) => {
+				reject(error);
+				child.kill();
+			});
+
+			child.on('exit', (code) => {
+				if (code !== 0 && code !== null) {
+					reject(new Error(`Worker process exited with code ${code}`));
+				}
+			});
+
+			// Send the task to the child process
+			child.send(task);
+		});
+	}
+
 	private async watermarkImage(imageUrl: string, watermark: string): Promise<Buffer> {
-		const image = await loadImage(imageUrl);
-		const canvas = createCanvas(image.width, image.height);
-		const ctx = canvas.getContext('2d');
-
-		ctx.drawImage(image, 0, 0);
-
-		const watermarkBuffer = this.createWatermarkBuffer(image.width, image.height, watermark);
-		const watermarkOverlay = await loadImage(watermarkBuffer);
-		ctx.drawImage(watermarkOverlay, 0, 0);
-
-		return canvas.toBuffer();
+		return this.runWatermarkWorker({ type: 'image', imageUrl, watermark });
 	}
 
 	private async watermarkVideo(videoUrl: string, watermark: string): Promise<Buffer> {
-		if (!ffmpeg) throw new Error('FFmpeg not found');
-
-		const { width, height } = await this.getVideoDimensions(videoUrl);
-		const watermarkBuffer = this.createWatermarkBuffer(width, height, watermark);
-
-		const tempDir = os.tmpdir();
-		const id = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
-		const watermarkPath = path.join(tempDir, `watermark-${id}.png`);
-		const outputPath = path.join(tempDir, `output-${id}.mp4`);
-
-		await fs.writeFile(watermarkPath, watermarkBuffer);
-
-		try {
-			const args = [
-				'-i',
-				videoUrl,
-				'-i',
-				watermarkPath,
-				'-filter_complex',
-				'overlay=0:0',
-				'-c:a',
-				'copy',
-				'-y', // Overwrite output file
-				outputPath
-			];
-
-			await execFileAsync(ffmpeg, args);
-
-			const outputBuffer = await fs.readFile(outputPath);
-			return outputBuffer;
-		} finally {
-			// Cleanup
-			await fs.unlink(watermarkPath).catch(() => null);
-			await fs.unlink(outputPath).catch(() => null);
-		}
-	}
-
-	private createWatermarkBuffer(width: number, height: number, watermark: string): Buffer {
-		const canvas = createCanvas(width, height);
-		const ctx = canvas.getContext('2d');
-
-		// More legible: higher opacity, larger font, and text outline
-		ctx.font = 'bold 36px sans-serif';
-		ctx.textBaseline = 'middle';
-
-		// Rotate context
-		ctx.translate(width / 2, height / 2);
-		ctx.rotate(-Math.PI / 4);
-		ctx.translate(-width / 2, -height / 2);
-
-		const diagonal = Math.sqrt(width * width + height * height);
-		const stepX = 350; // Horizontal spacing between tiles
-		const stepY = 180; // Vertical spacing between tiles
-
-		const lines = watermark.split('\n');
-		const lineHeight = 42;
-
-		for (let y = -diagonal; y < diagonal; y += stepY) {
-			for (let x = -diagonal; x < diagonal; x += stepX) {
-				lines.forEach((line, i) => {
-					const drawY = y + i * lineHeight;
-					// Draw dark outline for contrast
-					ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-					ctx.lineWidth = 3;
-					ctx.strokeText(line, x, drawY);
-					// Draw white fill
-					ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-					ctx.fillText(line, x, drawY);
-				});
-			}
-		}
-
-		return canvas.toBuffer();
-	}
-
-	private async getVideoDimensions(videoUrl: string): Promise<{ width: number; height: number }> {
-		const ffmpegPath = ffmpeg;
-		if (!ffmpegPath) throw new UserError(generateFailure(ErrorCodes.FfmpegNotFound));
-
-		try {
-			await execFileAsync(ffmpegPath, ['-i', videoUrl]);
-			return { width: 1280, height: 720 };
-		} catch (error: any) {
-			const stderr = error.stderr || '';
-			const match = /Stream #.+Video:.+, (\d+)x(\d+)/.exec(stderr);
-			if (match) {
-				return { width: parseInt(match[1]), height: parseInt(match[2]) };
-			}
-			throw new Error('Could not determine video dimensions');
-		}
+		return this.runWatermarkWorker({ type: 'video', videoUrl, watermark });
 	}
 }
