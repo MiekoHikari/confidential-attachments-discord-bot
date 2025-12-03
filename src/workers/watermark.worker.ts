@@ -199,57 +199,40 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 	const tempDir = os.tmpdir();
 	const id = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
 	const inputPath = path.join(tempDir, `input-${id}.mp4`);
+	const watermarkPath = path.join(tempDir, `watermark-${id}.png`);
 	const outputPath = path.join(tempDir, `output-${id}.mp4`);
 
 	try {
 		// Download the video file first
 		await downloadFile(videoUrl, inputPath);
 
-		// Escape special characters for ffmpeg drawtext filter
-		const escapedWatermark = watermark.replace(/\\/g, '\\\\').replace(/'/g, "'\\''").replace(/:/g, '\\:').replace(/%/g, '\\%');
-
-		// Build a filter that creates tiled watermarks using drawtext
-		// This is MUCH more memory efficient than PNG overlay
-		const filterParts: string[] = [];
-
-		// Create a grid of watermarks (5x5 pattern covering the video)
-		// Using relative positions based on video dimensions
-		for (let row = 0; row < 5; row++) {
-			for (let col = 0; col < 5; col++) {
-				const xPos = `(w*${col * 0.25})`;
-				const yPos = `(h*${row * 0.25})`;
-				filterParts.push(
-					`drawtext=text='${escapedWatermark}':fontsize=24:fontcolor=white@0.4:borderw=2:bordercolor=black@0.3:x=${xPos}:y=${yPos}`
-				);
-			}
-		}
-
-		// Add one more prominent watermark at a random-ish position (using time-based seed)
-		filterParts.push(
-			`drawtext=text='${escapedWatermark}':fontsize=24:fontcolor=cyan@0.7:borderw=2:bordercolor=black@0.5:x=(w-tw)/2+sin(t)*50:y=(h-th)/2+cos(t)*30`
-		);
-
-		const filterComplex = filterParts.join(',');
+		// Get dimensions from local file
+		const { width, height } = await getVideoDimensions(inputPath);
+		const watermarkBuffer = createWatermarkBuffer(width, height, watermark);
+		await fs.writeFile(watermarkPath, watermarkBuffer);
 
 		const args = [
-			'-y',
+			'-y', // Overwrite output file (put first to avoid prompts)
 			'-i',
 			inputPath,
-			'-vf',
-			filterComplex,
+			'-i',
+			watermarkPath,
+			'-filter_complex',
+			'[0:v][1:v]overlay=0:0:format=auto,format=yuv420p',
 			'-c:v',
 			'libx264',
 			'-preset',
-			'ultrafast',
+			'ultrafast', // Use ultrafast to reduce memory usage
 			'-crf',
 			'23',
 			'-c:a',
 			'copy',
 			'-threads',
-			'1',
+			'1', // Limit threads to reduce memory usage
 			outputPath
 		];
 
+		// Use spawn instead of execFile for better streaming and no buffer limits
 		await new Promise<void>((resolve, reject) => {
 			const ffmpegProcess = spawn(ffmpegPath, args, {
 				stdio: ['ignore', 'pipe', 'pipe']
@@ -278,8 +261,9 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 		const outputBuffer = await fs.readFile(outputPath);
 		return outputBuffer;
 	} finally {
-		// Cleanup temp files
+		// Cleanup all temp files
 		await fs.unlink(inputPath).catch(() => null);
+		await fs.unlink(watermarkPath).catch(() => null);
 		await fs.unlink(outputPath).catch(() => null);
 	}
 }
