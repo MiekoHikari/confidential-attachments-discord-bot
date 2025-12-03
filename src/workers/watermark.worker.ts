@@ -85,15 +85,37 @@ async function getVideoDimensions(videoUrl: string): Promise<{ width: number; he
 	if (!ffmpegPath) throw new Error('FFmpeg not found');
 
 	try {
-		await execFileAsync(ffmpegPath, ['-i', videoUrl]);
+		// ffmpeg always exits with error when just reading input info, so we catch it
+		await execFileAsync(ffmpegPath, ['-i', videoUrl, '-f', 'null', '-']);
+		// If somehow it succeeds without output, return default
 		return { width: 1280, height: 720 };
 	} catch (error: any) {
 		const stderr = error.stderr || '';
-		const match = /Stream #.+Video:.+, (\d+)x(\d+)/.exec(stderr);
-		if (match) {
-			return { width: parseInt(match[1]), height: parseInt(match[2]) };
+
+		// Try multiple regex patterns to match different ffmpeg output formats
+		// Pattern 1: "1920x1080" with optional brackets, SAR, DAR info
+		// Pattern 2: Handles various stream formats across different ffmpeg versions
+		const patterns = [
+			/(\d{2,5})x(\d{2,5})(?:\s|,|\[|$)/, // Simple WxH pattern
+			/Video:.+?(\d{2,5})x(\d{2,5})/, // Video: ... WxH
+			/, (\d{2,5})x(\d{2,5})[\s,\[]/ // comma space WxH
+		];
+
+		for (const pattern of patterns) {
+			const match = pattern.exec(stderr);
+			if (match) {
+				const width = parseInt(match[1]);
+				const height = parseInt(match[2]);
+				// Sanity check - dimensions should be reasonable
+				if (width >= 16 && width <= 7680 && height >= 16 && height <= 4320) {
+					return { width, height };
+				}
+			}
 		}
-		throw new Error('Could not determine video dimensions');
+
+		// Log the stderr for debugging
+		console.error('FFmpeg stderr output:', stderr);
+		throw new Error(`Could not determine video dimensions. FFmpeg output: ${stderr.slice(0, 500)}`);
 	}
 }
 
