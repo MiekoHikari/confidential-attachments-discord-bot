@@ -2,6 +2,8 @@ import { createCanvas, loadImage } from 'canvas';
 import { execFile } from 'child_process';
 import ffmpeg from 'ffmpeg-static';
 import { promises as fs } from 'fs';
+import * as https from 'https';
+import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
@@ -26,6 +28,46 @@ interface WorkerResult {
 	success: boolean;
 	buffer?: string; // Base64 encoded buffer for IPC transfer
 	error?: string;
+}
+
+/**
+ * Download a file from a URL to a local path
+ */
+async function downloadFile(url: string, destPath: string): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const protocol = url.startsWith('https') ? https : http;
+		const file = require('fs').createWriteStream(destPath);
+
+		protocol
+			.get(url, (response) => {
+				// Handle redirects
+				if (response.statusCode === 301 || response.statusCode === 302) {
+					const redirectUrl = response.headers.location;
+					if (redirectUrl) {
+						file.close();
+						downloadFile(redirectUrl, destPath).then(resolve).catch(reject);
+						return;
+					}
+				}
+
+				if (response.statusCode !== 200) {
+					file.close();
+					reject(new Error(`Failed to download: HTTP ${response.statusCode}`));
+					return;
+				}
+
+				response.pipe(file);
+				file.on('finish', () => {
+					file.close();
+					resolve();
+				});
+			})
+			.on('error', (err) => {
+				file.close();
+				fs.unlink(destPath).catch(() => null);
+				reject(err);
+			});
+	});
 }
 
 function createWatermarkBuffer(width: number, height: number, watermark: string): Buffer {
@@ -80,21 +122,19 @@ async function watermarkImage(imageUrl: string, watermark: string): Promise<Buff
 	return canvas.toBuffer();
 }
 
-async function getVideoDimensions(videoUrl: string): Promise<{ width: number; height: number }> {
+async function getVideoDimensions(localVideoPath: string): Promise<{ width: number; height: number }> {
 	const ffmpegPath = ffmpeg;
 	if (!ffmpegPath) throw new Error('FFmpeg not found');
 
 	try {
 		// ffmpeg always exits with error when just reading input info, so we catch it
-		await execFileAsync(ffmpegPath, ['-i', videoUrl, '-f', 'null', '-']);
+		await execFileAsync(ffmpegPath, ['-i', localVideoPath, '-f', 'null', '-']);
 		// If somehow it succeeds without output, return default
 		return { width: 1280, height: 720 };
 	} catch (error: any) {
 		const stderr = error.stderr || '';
 
 		// Try multiple regex patterns to match different ffmpeg output formats
-		// Pattern 1: "1920x1080" with optional brackets, SAR, DAR info
-		// Pattern 2: Handles various stream formats across different ffmpeg versions
 		const patterns = [
 			/(\d{2,5})x(\d{2,5})(?:\s|,|\[|$)/, // Simple WxH pattern
 			/Video:.+?(\d{2,5})x(\d{2,5})/, // Video: ... WxH
@@ -122,20 +162,24 @@ async function getVideoDimensions(videoUrl: string): Promise<{ width: number; he
 async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buffer> {
 	if (!ffmpeg) throw new Error('FFmpeg not found');
 
-	const { width, height } = await getVideoDimensions(videoUrl);
-	const watermarkBuffer = createWatermarkBuffer(width, height, watermark);
-
 	const tempDir = os.tmpdir();
 	const id = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+	const inputPath = path.join(tempDir, `input-${id}.mp4`);
 	const watermarkPath = path.join(tempDir, `watermark-${id}.png`);
 	const outputPath = path.join(tempDir, `output-${id}.mp4`);
 
-	await fs.writeFile(watermarkPath, watermarkBuffer);
-
 	try {
+		// Download the video file first (ffmpeg-static on Linux may not support HTTPS URLs)
+		await downloadFile(videoUrl, inputPath);
+
+		// Get dimensions from local file
+		const { width, height } = await getVideoDimensions(inputPath);
+		const watermarkBuffer = createWatermarkBuffer(width, height, watermark);
+		await fs.writeFile(watermarkPath, watermarkBuffer);
+
 		const args = [
 			'-i',
-			videoUrl,
+			inputPath,
 			'-i',
 			watermarkPath,
 			'-filter_complex',
@@ -151,7 +195,8 @@ async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buff
 		const outputBuffer = await fs.readFile(outputPath);
 		return outputBuffer;
 	} finally {
-		// Cleanup
+		// Cleanup all temp files
+		await fs.unlink(inputPath).catch(() => null);
 		await fs.unlink(watermarkPath).catch(() => null);
 		await fs.unlink(outputPath).catch(() => null);
 	}
