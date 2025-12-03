@@ -8,8 +8,14 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
-import { UserError } from '@sapphire/framework';
-import { ErrorCodes, generateFailure } from '#lib/errorHandler';
+
+// Worker-specific error class (self-contained, no external dependencies)
+class WorkerError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'WorkerError';
+	}
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -55,7 +61,7 @@ async function downloadFile(url: string, destPath: string): Promise<void> {
 
 				if (response.statusCode !== 200) {
 					file.close();
-					reject(new UserError(generateFailure(ErrorCodes.DownloadError, { statusCode: response.statusCode })));
+					reject(new WorkerError(`Failed to download file: HTTP ${response.statusCode}`));
 					return;
 				}
 
@@ -152,7 +158,7 @@ async function watermarkImage(imageUrl: string, watermark: string): Promise<Buff
 
 async function getVideoDimensions(localVideoPath: string): Promise<{ width: number; height: number }> {
 	const ffprobePath = ffprobeStatic.path;
-	if (!ffprobePath) throw new UserError(generateFailure(ErrorCodes.FfmpegNotFound));
+	if (!ffprobePath) throw new WorkerError('FFprobe is not installed or not found in the system path');
 
 	try {
 		// Use ffprobe to get video dimensions in JSON format
@@ -191,7 +197,7 @@ async function getVideoDimensions(localVideoPath: string): Promise<{ width: numb
 }
 
 async function watermarkVideo(videoUrl: string, watermark: string): Promise<Buffer> {
-	if (!ffmpeg) throw new UserError(generateFailure(ErrorCodes.FfmpegNotFound));
+	if (!ffmpeg) throw new WorkerError('FFmpeg is not installed or not found in the system path');
 
 	const tempDir = os.tmpdir();
 	const id = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -256,7 +262,7 @@ async function processTask(task: WatermarkTask): Promise<WorkerResult> {
 	} catch (error) {
 		return {
 			success: false,
-			error: error instanceof UserError ? error.message : error instanceof Error ? error.message : String(error)
+			error: error instanceof Error ? error.message : String(error)
 		};
 	}
 }
