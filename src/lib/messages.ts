@@ -4,8 +4,10 @@ export const ErrorCodes = {
 	FileTooLarge: 'E002',
 	InvalidFileType: 'E003',
 	PermissionDenied: 'E004',
-	PeriodNotStarted: 'E005',
-	InternalError: 'E006'
+	InternalError: 'E005',
+	
+    PeriodNotStarted: 'E006',
+    EnvironmentConfigurationError: 'E007'
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
@@ -16,7 +18,8 @@ export const ErrorMessages: Record<ErrorCode, string> = {
 	[ErrorCodes.InvalidFileType]: 'That file type is not supported.',
 	[ErrorCodes.PermissionDenied]: 'You do not have permission to perform this action.',
 	[ErrorCodes.InternalError]: 'Something went wrong internally.',
-    [ErrorCodes.PeriodNotStarted]: 'The confidential period has not started yet.'
+    [ErrorCodes.PeriodNotStarted]: 'The confidential period has not started yet.',
+    [ErrorCodes.EnvironmentConfigurationError]: 'The environment variable is not configured properly: '
 };
 
 export function getErrorMessage(code: ErrorCode): string {
