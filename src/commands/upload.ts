@@ -1,24 +1,16 @@
 import { ErrorCodes, generateFailure } from '#lib/errorHandler';
 import { generateId, PerformanceMonitor } from '#lib/utils';
-import { cleanupFile, watermarkVideoToFile } from '#lib/videoProcessor';
+import { cleanupFile, watermarkImage, watermarkVideoToFile } from '#lib/videoProcessor';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
-import { fork, type ChildProcess } from 'child_process';
 import { Attachment, AttachmentBuilder } from 'discord.js';
 import { createReadStream } from 'fs';
-import * as path from 'path';
 
 // Discord Supported file types
 const validImageTypes = ['image/jpeg', 'image/png', 'image/gif'];
 const validVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-matroska'];
 const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mov', '.mkv'];
 const maxFileSizeInBytes = 512 * 1024 * 1024;
-
-interface WorkerResult {
-	success: boolean;
-	buffer?: string; // Base64 encoded
-	error?: string;
-}
 
 @ApplyOptions<Command.Options>({
 	description: 'Upload images/videos as confidential attachments',
@@ -122,8 +114,8 @@ export class UserCommand extends Command {
 					await interaction.editReply(`Processing file: ${index + 1} / ${attachments.length}...`);
 
 					if (validImageTypes.includes(attachment.contentType!)) {
-						// Images: use worker (small memory footprint)
-						const processedBuffer = await this.watermarkImage(attachment.url, watermarkText);
+						// Images: process directly in main process
+						const processedBuffer = await watermarkImage(attachment.url, watermarkText);
 						processedFiles.push(new AttachmentBuilder(processedBuffer, { name: `confidential-${attachment.name}` }));
 					} else {
 						// Videos: process directly without worker, use file stream
@@ -209,78 +201,5 @@ export class UserCommand extends Command {
 
 	private validateFileSize(attachment: Attachment, maxSizeInBytes: number): boolean {
 		return attachment.size <= maxSizeInBytes;
-	}
-
-	/**
-	 * Run watermarking in a separate child process to avoid blocking the main event loop
-	 */
-	private runWatermarkWorker(
-		task: { type: 'image'; imageUrl: string; watermark: string } | { type: 'video'; videoUrl: string; watermark: string }
-	): Promise<Buffer> {
-		return new Promise((resolve, reject) => {
-			// Resolve the worker path - in production it will be compiled to JS
-			const workerPath = path.resolve(__dirname, '../workers/watermark.worker.js');
-
-			const child: ChildProcess = fork(workerPath, [], {
-				stdio: ['pipe', 'pipe', 'pipe', 'ipc']
-			});
-
-			let stderrData = '';
-			let stdoutData = '';
-			let settled = false;
-
-			const settle = (fn: () => void) => {
-				if (!settled) {
-					settled = true;
-					fn();
-				}
-			};
-
-			// Capture stderr for debugging
-			if (child.stderr) {
-				child.stderr.on('data', (data) => {
-					stderrData += data.toString();
-				});
-			}
-
-			// Capture stdout for debugging
-			if (child.stdout) {
-				child.stdout.on('data', (data) => {
-					stdoutData += data.toString();
-				});
-			}
-
-			child.on('message', (result: WorkerResult) => {
-				if (result.success && result.buffer) {
-					settle(() => resolve(Buffer.from(result.buffer!, 'base64')));
-				} else {
-					settle(() => reject(new Error(result.error || 'Unknown worker error')));
-				}
-				child.kill();
-			});
-
-			child.on('error', (error) => {
-				settle(() => reject(error));
-				child.kill();
-			});
-
-			child.on('exit', (code, signal) => {
-				if (!settled) {
-					const errorDetails = stderrData || stdoutData || 'No additional error output';
-					if (signal) {
-						settle(() => reject(new Error(`Worker killed by signal ${signal}. Details: ${errorDetails}`)));
-					} else if (code !== 0) {
-						settle(() => reject(new Error(`Worker exited with code ${code}. Details: ${errorDetails}`)));
-					}
-				}
-			});
-
-			// Send the task to the child process
-			child.send(task);
-		});
-	}
-
-	private async watermarkImage(imageUrl: string, watermark: string): Promise<Buffer> {
-		return this.runWatermarkWorker({ type: 'image', imageUrl, watermark });
 	}
 }
