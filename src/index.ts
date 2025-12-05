@@ -15,7 +15,13 @@ const client = new SapphireClient({
 	],
 	partials: [
 		// Build as we code
-	]
+	],
+	api: {
+		automaticallyConnect: true,
+		listenOptions: {
+			port: 4000
+		}
+	}
 });
 
 const main = async () => {

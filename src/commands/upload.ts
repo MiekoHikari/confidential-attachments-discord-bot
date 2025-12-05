@@ -1,10 +1,8 @@
 import { ErrorCodes, generateFailure } from '#lib/errorHandler';
 import { generateId, PerformanceMonitor } from '#lib/utils';
-import { cleanupFile, watermarkImage, watermarkVideoToFile } from '#lib/videoProcessor';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
-import { Attachment, AttachmentBuilder } from 'discord.js';
-import { createReadStream } from 'fs';
+import { Attachment } from 'discord.js';
 
 // Discord Supported file types
 const validImageTypes = ['image/jpeg', 'image/png', 'image/gif'];
@@ -104,46 +102,34 @@ export class UserCommand extends Command {
 				throw new UserError(generateFailure(ErrorCodes.UploadFailed, { errors: attachmentErrors }));
 			}
 
-			const processedFiles: AttachmentBuilder[] = [];
-			const tempFilesToCleanup: string[] = [];
+			// const processedFiles: AttachmentBuilder[] = [];
+			// const tempFilesToCleanup: string[] = [];
 			const watermarkText = generateId(6);
 
-			try {
-				// Process files
-				for (const [index, attachment] of attachments.entries()) {
-					await interaction.editReply(`Processing file: ${index + 1} / ${attachments.length}...`);
+			const bobClient = this.container.blobContainerClient.getBlockBlobClient(watermarkText);
+			await bobClient.uploadData(await this.getAttachmentBuffer(attachments[0]));
 
-					if (validImageTypes.includes(attachment.contentType!)) {
-						// Images: process directly in main process
-						const processedBuffer = await watermarkImage(attachment.url, watermarkText);
-						processedFiles.push(new AttachmentBuilder(processedBuffer, { name: `confidential-${attachment.name}` }));
-					} else {
-						// Videos: process directly without worker, use file stream
-						const outputPath = await watermarkVideoToFile(attachment.url, watermarkText);
-						tempFilesToCleanup.push(outputPath);
+			const { url } = bobClient;
 
-						// Use file stream instead of loading entire file into memory
-						processedFiles.push(new AttachmentBuilder(createReadStream(outputPath), { name: `confidential-${attachment.name}` }));
+			const msg = await interaction.editReply(`Created Job ID: **${watermarkText}**\n${url}`);
+
+			return fetch(`${process.env.CAMS_API_ENDPOINT}/new-item`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					container: bobClient.containerName,
+					jobId: watermarkText,
+					type: 'video',
+					filename: attachments[0].name,
+					responseUrl: `http://localhost:4000/cams`,
+					watermarkText,
+					interaction: {
+						applicationId: interaction.applicationId,
+						token: interaction.token,
+						messageId: msg.id
 					}
-				}
-
-				// Stop monitoring and get report
-				const perfReport = perfMonitor.stop();
-				const perfSummary = PerformanceMonitor.getCompactSummary(perfReport);
-
-				// Log detailed performance report to console
-				this.container.logger.info(`[Upload Command] Performance:\n${PerformanceMonitor.formatReport(perfReport)}`);
-
-				return await interaction.editReply({
-					content: `✅ Upload Complete!\n\n${perfSummary}`,
-					files: processedFiles
-				});
-			} finally {
-				// Always cleanup temp files
-				for (const filePath of tempFilesToCleanup) {
-					await cleanupFile(filePath);
-				}
-			}
+				})
+			});
 		} catch (error) {
 			// Stop monitoring even on error
 			const perfReport = perfMonitor.stop();
@@ -199,5 +185,15 @@ export class UserCommand extends Command {
 
 	private validateFileSize(attachment: Attachment, maxSizeInBytes: number): boolean {
 		return attachment.size <= maxSizeInBytes;
+	}
+
+	private async getAttachmentBuffer(attachment: Attachment): Promise<Buffer<ArrayBufferLike>> {
+		const response = await fetch(attachment.url);
+
+		if (!response.ok) {
+			throw new UserError(generateFailure(ErrorCodes.DownloadError, { fileName: attachment.name || 'unknown' }));
+		}
+
+		return Buffer.from(await response.arrayBuffer());
 	}
 }

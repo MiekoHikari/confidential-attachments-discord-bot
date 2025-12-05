@@ -14,6 +14,7 @@ const bodySchema = z.object({
 
 export class UserRoute extends Route {
 	public async run(request: Route.Request, response: Route.Response) {
+		this.container.logger.info('Received CAMS callback request');
 		const { jobId, filename, interaction } = await request.readValidatedBodyJson((data) => bodySchema.parse(data));
 
 		if (!this.container.client.isReady()) return response.error(500, 'Client not ready');
@@ -41,7 +42,10 @@ export class UserRoute extends Route {
 				content: `Access Code ${jobId} has been generated`,
 				files: [attachment]
 			});
-		} catch {
+
+			return response.ok('Interaction edited successfully');
+		} catch (error) {
+			this.container.logger.error(`Failed to edit interaction for Job ID ${jobId}: ${(error as Error).message}`);
 			return response.error(400, 'Interaction can no longer be edited');
 		}
 	}
