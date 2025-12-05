@@ -208,9 +208,6 @@ export async function watermarkVideoToFile(videoUrl: string, watermark: string):
 	return outputPath;
 }
 
-/**
- * Clean up a temporary file
- */
 export async function cleanupFile(filePath: string): Promise<void> {
 	await fs.unlink(filePath).catch(() => null);
 }

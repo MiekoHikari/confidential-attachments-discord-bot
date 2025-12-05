@@ -134,12 +134,10 @@ export class UserCommand extends Command {
 				// Log detailed performance report to console
 				this.container.logger.info(`[Upload Command] Performance:\n${PerformanceMonitor.formatReport(perfReport)}`);
 
-				const result = await interaction.editReply({
+				return await interaction.editReply({
 					content: `✅ Upload Complete!\n\n${perfSummary}`,
 					files: processedFiles
 				});
-
-				return result;
 			} finally {
 				// Always cleanup temp files
 				for (const filePath of tempFilesToCleanup) {
