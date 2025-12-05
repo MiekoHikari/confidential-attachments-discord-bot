@@ -6,6 +6,7 @@
   "license": "UNLICENSE",
   "type": "commonjs",
   "dependencies": {
+    "@azure/storage-blob": "^12.29.1",
     "@sapphire/decorators": "^6.1.1",
     "@sapphire/discord-utilities": "^3.4.4",
     "@sapphire/discord.js-utilities": "7.3.2",
@@ -22,7 +23,8 @@
     "canvas": "^3.2.0",
     "colorette": "^2.0.20",
     "discord.js": "^14.17.3",
-    "node-appwrite": "^20.3.0"
+    "node-appwrite": "^20.3.0",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@sapphire/cli": "^1.9.3",

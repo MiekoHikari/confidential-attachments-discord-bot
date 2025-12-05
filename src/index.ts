@@ -1,4 +1,6 @@
 import { createAppwriteClient } from '#lib/utils';
+import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
+
 import './lib/setup';
 
 import { container, LogLevel, SapphireClient } from '@sapphire/framework';
@@ -19,6 +21,8 @@ const client = new SapphireClient({
 const main = async () => {
 	try {
 		container.appwrite = createAppwriteClient();
+		const blobServiceClient = BlobServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING!);
+		container.blobContainerClient = blobServiceClient.getContainerClient('cams');
 
 		client.logger.info('Logging in to Discord... 🔑');
 		await client.login();
@@ -33,6 +37,7 @@ const main = async () => {
 declare module '@sapphire/framework' {
 	interface Container {
 		appwrite: ReturnType<typeof createAppwriteClient>;
+		blobContainerClient: ContainerClient;
 	}
 }
 
