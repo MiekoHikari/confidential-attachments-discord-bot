@@ -1,5 +1,5 @@
 import { ErrorCodes, generateFailure } from '#lib/errorHandler';
-import { generateId, PerformanceMonitor } from '#lib/utils';
+import { encodeId } from '#lib/utils';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
 import { Attachment } from 'discord.js';
@@ -86,10 +86,6 @@ export class UserCommand extends Command {
 	public override async chatInputRun(interaction: Command.ChatInputCommandInteraction) {
 		await interaction.deferReply({ flags: ['Ephemeral'] });
 
-		// Start performance monitoring
-		const perfMonitor = new PerformanceMonitor();
-		perfMonitor.start(100); // Sample every 100ms
-
 		try {
 			// Get attachments
 			const attachments = this.extractAttachmentsFromInteraction(interaction);
@@ -104,7 +100,7 @@ export class UserCommand extends Command {
 
 			// const processedFiles: AttachmentBuilder[] = [];
 			// const tempFilesToCleanup: string[] = [];
-			const watermarkText = generateId(6);
+			const watermarkText = encodeId(interaction.user.id);
 
 			const bobClient = this.container.blobContainerClient.getBlockBlobClient(watermarkText);
 			await bobClient.uploadData(await this.getAttachmentBuffer(attachments[0]));
@@ -119,7 +115,7 @@ export class UserCommand extends Command {
 				body: JSON.stringify({
 					container: bobClient.containerName,
 					jobId: watermarkText,
-					type: 'video',
+					type: 'image',
 					filename: attachments[0].name,
 					responseUrl: `http://localhost:4000/cams`,
 					watermarkText,
@@ -131,9 +127,6 @@ export class UserCommand extends Command {
 				})
 			});
 		} catch (error) {
-			// Stop monitoring even on error
-			const perfReport = perfMonitor.stop();
-			this.container.logger.info(`[Upload Command] Failed - Performance:\n${PerformanceMonitor.formatReport(perfReport)}`);
 			throw error;
 		}
 	}

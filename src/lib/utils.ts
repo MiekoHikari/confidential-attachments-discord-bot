@@ -248,18 +248,22 @@ function getGuildInfo(guild: Guild | null) {
 
 const BASE62_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
-/**
- * Generates a unique ID in the format: {base36 timestamp}-{base62 random}
- * @param randomLength The length of the random base62 portion (default: 8)
- * @returns A unique ID string
- */
-export function generateId(randomLength = 8): string {
-	const timestamp = Date.now().toString(36);
-	let random = '';
-	for (let i = 0; i < randomLength; i++) {
-		random += BASE62_CHARS[Math.floor(Math.random() * BASE62_CHARS.length)];
+export function encodeId(id: string): string {
+	let num = BigInt(id);
+	let result = '';
+	while (num > 0n) {
+		result = BASE62_CHARS[Number(num % 62n)] + result;
+		num /= 62n;
 	}
-	return `${timestamp}-${random}`;
+	return result || '0';
+}
+
+export function decodeId(encoded: string): string {
+	let num = 0n;
+	for (const char of encoded) {
+		num = num * 62n + BigInt(BASE62_CHARS.indexOf(char));
+	}
+	return num.toString();
 }
 
 /**
