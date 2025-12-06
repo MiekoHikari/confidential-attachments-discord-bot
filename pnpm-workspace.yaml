@@ -3,3 +3,4 @@ onlyBuiltDependencies:
   - '@swc/core'
   - canvas
   - ffmpeg-static
+  - msgpackr-extract

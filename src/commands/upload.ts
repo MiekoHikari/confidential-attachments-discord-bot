@@ -1,4 +1,5 @@
 import { ErrorCodes, generateFailure } from '#lib/errorHandler';
+import { newJobSchema, watermarkQueue } from '#lib/mq';
 import { encodeId } from '#lib/utils';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
@@ -98,9 +99,7 @@ export class UserCommand extends Command {
 				throw new UserError(generateFailure(ErrorCodes.UploadFailed, { errors: attachmentErrors }));
 			}
 
-			// const processedFiles: AttachmentBuilder[] = [];
-			// const tempFilesToCleanup: string[] = [];
-			const watermarkText = encodeId(interaction.user.id);
+			const watermarkText = `${encodeId(interaction.user.id)}#${encodeId(Date.now().toString())}`;
 
 			const bobClient = this.container.blobContainerClient.getBlockBlobClient(watermarkText);
 			await bobClient.uploadData(await this.getAttachmentBuffer(attachments[0]));
@@ -109,22 +108,22 @@ export class UserCommand extends Command {
 
 			const msg = await interaction.editReply(`Created Job ID: **${watermarkText}**\n${url}`);
 
-			return fetch(`${process.env.CAMS_API_ENDPOINT}/new-item`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					container: bobClient.containerName,
-					jobId: watermarkText,
-					type: 'image',
-					filename: attachments[0].name,
-					responseUrl: `http://localhost:4000/cams`,
-					watermarkText,
-					interaction: {
-						applicationId: interaction.applicationId,
-						token: interaction.token,
-						messageId: msg.id
-					}
-				})
+			const job = newJobSchema.parse({
+				container: bobClient.containerName,
+				jobId: watermarkText,
+				type: validImageTypes.includes(attachments[0].contentType || '') ? 'image' : 'video',
+				filename: attachments[0].name || 'unknown',
+				responseUrl: `${process.env.LOCAL_API_ENDPOINT}/cams`,
+				watermarkText,
+				interaction: {
+					applicationId: interaction.applicationId,
+					token: interaction.token,
+					messageId: msg.id
+				}
+			});
+
+			await watermarkQueue.add('watermark', job, {
+				jobId: watermarkText
 			});
 		} catch (error) {
 			throw error;

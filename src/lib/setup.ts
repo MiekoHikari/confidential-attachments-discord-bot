@@ -37,6 +37,7 @@ declare module '@skyra/env-utilities' {
 
 		// CAMS API
 		CAMS_API_ENDPOINT: string;
+		LOCAL_API_ENDPOINT: string;
 
 		// REDIS
 		REDIS_URL: string;
