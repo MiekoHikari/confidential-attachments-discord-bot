@@ -1,9 +1,9 @@
 {
   "name": "confidential-attachments-discord-bot",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "dist/index.js",
-  "author": "@sapphire",
-  "license": "UNLICENSE",
+  "author": "@miekohikari",
+  "license": "AGPL-3.0-only",
   "type": "commonjs",
   "dependencies": {
     "@azure/storage-blob": "^12.29.1",
