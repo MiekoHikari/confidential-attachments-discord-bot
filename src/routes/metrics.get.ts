@@ -6,6 +6,10 @@ export class UserRoute extends Route {
 		const waitingCount = await watermarkQueue.getWaitingCount();
 		const activeCount = await watermarkQueue.getActiveCount();
 
-		return response.ok(`${waitingCount + activeCount}`); // Return total jobs in queue
+		return response.ok({
+			waitingCount,
+			activeCount,
+			total: waitingCount + activeCount
+		}); // Return total jobs in queue
 	}
 }
