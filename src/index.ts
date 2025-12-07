@@ -5,15 +5,14 @@ import './lib/setup';
 import { container, LogLevel, SapphireClient } from '@sapphire/framework';
 import { TablesDB, Storage } from 'node-appwrite';
 import { createAppwriteClient } from '#lib/services/appwrite.service';
+import { GatewayIntentBits } from 'discord.js';
 // import { GatewayIntentBits, Partials } from 'discord.js';
 
 const client = new SapphireClient({
 	logger: {
 		level: LogLevel.Debug
 	},
-	intents: [
-		// Build as we code
-	],
+	intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
 	partials: [
 		// Build as we code
 	],

@@ -1,12 +1,13 @@
 // TODO: Interaction Timeout handling for large files
 // TODO: Turn Repository into Monorepo for better structure and create an upload container queue
 import { bufferToFile, createStorageFile, duplicateHashExists } from '#lib/services/appwrite.service';
+import { attachmentAnnounceEmbed } from '#lib/services/cams.service';
 import { sha256Hash } from '#lib/services/crypto.service';
 import { ErrorCodes, generateFailure } from '#lib/services/errors.service';
 import { Items } from '#lib/types/appwrite';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
-import { Attachment } from 'discord.js';
+import { ActionRowBuilder, Attachment, ButtonBuilder, ButtonStyle, MessageActionRowComponentBuilder } from 'discord.js';
 import { ID } from 'node-appwrite';
 
 // Discord Supported file types
@@ -92,6 +93,11 @@ export class UserCommand extends Command {
 		await interaction.deferReply({ flags: ['Ephemeral'] });
 
 		try {
+			if (!interaction.channel?.isSendable())
+				throw new UserError(
+					generateFailure(ErrorCodes.UploadFailed, { errors: ['Bot does not have permission to send messages in this channel.'] })
+				);
+
 			const attachments = this.extractAttachmentsFromInteraction(interaction);
 			const validTypes = [...validImageTypes, ...validVideoTypes];
 
@@ -105,9 +111,20 @@ export class UserCommand extends Command {
 
 			const message = await interaction.editReply({ content: 'File uploaded successfully as a confidential attachment.' });
 
-			await this.createAppwriteItemRows(interaction, [storageItem], message.id);
+			const { rows } = await this.createAppwriteItemRows(interaction, [storageItem], message.id);
 
-			return;
+			const actionRow1 = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+				new ButtonBuilder()
+					.setLabel(attachments[0].name)
+					.setCustomId(`viewFile#${rows[0].$id}`)
+					.setStyle(ButtonStyle.Secondary)
+					.setEmoji('📁')
+			);
+
+			return interaction.channel.send({
+				components: [actionRow1],
+				embeds: [attachmentAnnounceEmbed(interaction.user.id, attachments.length)]
+			});
 		} catch (error) {
 			throw error;
 		}
