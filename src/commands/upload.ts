@@ -1,4 +1,9 @@
+// TODO: Interaction Timeout handling for large files
+// TODO: Turn Repository into Monorepo for better structure and create an upload container queue
+import { bufferToFile, createStorageFile, duplicateHashExists } from '#lib/services/appwrite.service';
+import { sha256Hash } from '#lib/services/crypto.service';
 import { ErrorCodes, generateFailure } from '#lib/services/errors.service';
+import { Items } from '#lib/types/appwrite';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
 import { Attachment } from 'discord.js';
@@ -8,7 +13,7 @@ import { ID } from 'node-appwrite';
 const validImageTypes = ['image/jpeg', 'image/png', 'image/gif'];
 const validVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-matroska'];
 const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mov', '.mkv'];
-const maxFileSizeInBytes = 512 * 1024 * 1024;
+const maxFileSizeInBytes = 499.9 * 1024 * 1024;
 
 @ApplyOptions<Command.Options>({
 	description: 'Upload images/videos as confidential attachments',
@@ -87,58 +92,68 @@ export class UserCommand extends Command {
 		await interaction.deferReply({ flags: ['Ephemeral'] });
 
 		try {
-			// Get attachments
 			const attachments = this.extractAttachmentsFromInteraction(interaction);
 			const validTypes = [...validImageTypes, ...validVideoTypes];
 
-			// Validation
 			const attachmentErrors = this.validateAttachments(attachments, validTypes, maxFileSizeInBytes);
 
 			if (attachmentErrors.length > 0) {
 				throw new UserError(generateFailure(ErrorCodes.UploadFailed, { errors: attachmentErrors }));
 			}
 
-			// const fileId = ID.unique();
+			const storageItem = await this.createAppwriteStorageItem(interaction, attachments[0]);
 
-			// const inputFile: File = new File([await this.getAttachmentBuffer(attachments[0])], attachments[0].name || 'unknown', {
-			// 	type: attachments[0].contentType || 'application/octet-stream'
-			// });
+			const message = await interaction.editReply({ content: 'File uploaded successfully as a confidential attachment.' });
 
-			// const file = this.container.appwriteStorageClient.createFile({
-			// 	bucketId: process.env.APPWRITE_BUCKET_ID,
-			// 	fileId: fileId,
-			// 	file: arrayBuffer
-			// });
+			await this.createAppwriteItemRows(interaction, [storageItem], message.id);
 
-			// const watermarkText = `${encodeId(interaction.user.id)}#${encodeId(Date.now().toString())}`;
-
-			// const bobClient = this.container.blobContainerClient.getBlockBlobClient(watermarkText);
-			// await bobClient.uploadData(await this.getAttachmentBuffer(attachments[0]));
-
-			// const { url } = bobClient;
-
-			// const msg = await interaction.editReply(`Created Job ID: **${watermarkText}**\n${url}`);
-
-			// const job = newJobSchema.parse({
-			// 	container: bobClient.containerName,
-			// 	jobId: watermarkText,
-			// 	type: validImageTypes.includes(attachments[0].contentType || '') ? 'image' : 'video',
-			// 	filename: attachments[0].name || 'unknown',
-			// 	responseUrl: `${process.env.LOCAL_API_ENDPOINT}/cams`,
-			// 	watermarkText,
-			// 	interaction: {
-			// 		applicationId: interaction.applicationId,
-			// 		token: interaction.token,
-			// 		messageId: msg.id
-			// 	}
-			// });
-
-			// await watermarkQueue.add('watermark', job, {
-			// 	jobId: watermarkText
-			// });
+			return;
 		} catch (error) {
 			throw error;
 		}
+	}
+
+	private async createAppwriteStorageItem(interaction: Command.ChatInputCommandInteraction, attachment: Attachment) {
+		const fileBuffer = await this.getAttachmentBuffer(attachment);
+		const itemHash = await sha256Hash(fileBuffer);
+
+		if (await duplicateHashExists(this.container.appwriteTablesDb, itemHash, interaction.guildId!, interaction.user.id)) {
+			throw new UserError(generateFailure(ErrorCodes.DuplicateFileError, { fileName: attachment.name || 'unknown' }));
+		}
+
+		const fileId = ID.unique();
+		const file = bufferToFile(fileBuffer, attachment.name || 'unknown', attachment.contentType || 'application/octet-stream');
+
+		const storageItem = await createStorageFile(this.container.appwriteStorageClient, process.env.APPWRITE_BUCKET_ID!, fileId, file);
+
+		return {
+			storageFileId: storageItem.$id,
+			type: validImageTypes.includes(attachment.contentType || '') ? 'image' : 'video',
+			hash: itemHash,
+			sizeBytes: attachment.size
+		};
+	}
+
+	private async createAppwriteItemRows(
+		interaction: Command.ChatInputCommandInteraction,
+		storageItems: { storageFileId: string; type: string; hash: string; sizeBytes: number }[],
+		messageId: string
+	) {
+		return await this.container.appwriteTablesDb.createRows<Items>({
+			databaseId: process.env.APPWRITE_DATABASE_ID!,
+			tableId: 'media_items'!,
+			rows: storageItems.map((item) => ({
+				storageFileId: item.storageFileId,
+				guildId: interaction.guildId!,
+				channelId: interaction.channelId!,
+				messageId: messageId,
+				authorId: interaction.user.id,
+				type: item.type,
+				hash: item.hash,
+				sizeBytes: item.sizeBytes,
+				flags: null
+			}))
+		});
 	}
 
 	private extractAttachmentsFromInteraction(interaction: Command.ChatInputCommandInteraction): Attachment[] {
