@@ -1,4 +1,4 @@
-import { FailureContext } from '#lib/errorHandler';
+import { FailureContext } from '#lib/services/errors.service';
 import { ChatInputCommandErrorPayload, Events, Listener, UserError } from '@sapphire/framework';
 import { EmbedBuilder } from 'discord.js';
 

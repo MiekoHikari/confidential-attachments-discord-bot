@@ -1,9 +1,8 @@
-import { ErrorCodes, generateFailure } from '#lib/errorHandler';
-import { newJobSchema, watermarkQueue } from '#lib/mq';
-import { encodeId } from '#lib/utils';
+import { ErrorCodes, generateFailure } from '#lib/services/errors.service';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
 import { Attachment } from 'discord.js';
+import { ID } from 'node-appwrite';
 
 // Discord Supported file types
 const validImageTypes = ['image/jpeg', 'image/png', 'image/gif'];
@@ -99,32 +98,44 @@ export class UserCommand extends Command {
 				throw new UserError(generateFailure(ErrorCodes.UploadFailed, { errors: attachmentErrors }));
 			}
 
-			const watermarkText = `${encodeId(interaction.user.id)}#${encodeId(Date.now().toString())}`;
+			// const fileId = ID.unique();
 
-			const bobClient = this.container.blobContainerClient.getBlockBlobClient(watermarkText);
-			await bobClient.uploadData(await this.getAttachmentBuffer(attachments[0]));
+			// const inputFile: File = new File([await this.getAttachmentBuffer(attachments[0])], attachments[0].name || 'unknown', {
+			// 	type: attachments[0].contentType || 'application/octet-stream'
+			// });
 
-			const { url } = bobClient;
+			// const file = this.container.appwriteStorageClient.createFile({
+			// 	bucketId: process.env.APPWRITE_BUCKET_ID,
+			// 	fileId: fileId,
+			// 	file: arrayBuffer
+			// });
 
-			const msg = await interaction.editReply(`Created Job ID: **${watermarkText}**\n${url}`);
+			// const watermarkText = `${encodeId(interaction.user.id)}#${encodeId(Date.now().toString())}`;
 
-			const job = newJobSchema.parse({
-				container: bobClient.containerName,
-				jobId: watermarkText,
-				type: validImageTypes.includes(attachments[0].contentType || '') ? 'image' : 'video',
-				filename: attachments[0].name || 'unknown',
-				responseUrl: `${process.env.LOCAL_API_ENDPOINT}/cams`,
-				watermarkText,
-				interaction: {
-					applicationId: interaction.applicationId,
-					token: interaction.token,
-					messageId: msg.id
-				}
-			});
+			// const bobClient = this.container.blobContainerClient.getBlockBlobClient(watermarkText);
+			// await bobClient.uploadData(await this.getAttachmentBuffer(attachments[0]));
 
-			await watermarkQueue.add('watermark', job, {
-				jobId: watermarkText
-			});
+			// const { url } = bobClient;
+
+			// const msg = await interaction.editReply(`Created Job ID: **${watermarkText}**\n${url}`);
+
+			// const job = newJobSchema.parse({
+			// 	container: bobClient.containerName,
+			// 	jobId: watermarkText,
+			// 	type: validImageTypes.includes(attachments[0].contentType || '') ? 'image' : 'video',
+			// 	filename: attachments[0].name || 'unknown',
+			// 	responseUrl: `${process.env.LOCAL_API_ENDPOINT}/cams`,
+			// 	watermarkText,
+			// 	interaction: {
+			// 		applicationId: interaction.applicationId,
+			// 		token: interaction.token,
+			// 		messageId: msg.id
+			// 	}
+			// });
+
+			// await watermarkQueue.add('watermark', job, {
+			// 	jobId: watermarkText
+			// });
 		} catch (error) {
 			throw error;
 		}

@@ -1,5 +1,5 @@
 // Check if the command is being run during an active period
-import { ErrorCodes, generateFailure } from '#lib/errorHandler';
+import { ErrorCodes, generateFailure } from '#lib/services/errors.service';
 import { Precondition } from '@sapphire/framework';
 
 const BETA_ACTIVE = true;

@@ -1,10 +1,10 @@
-import { createAppwriteClient } from '#lib/utils';
 import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
 
 import './lib/setup';
 
 import { container, LogLevel, SapphireClient } from '@sapphire/framework';
 import { TablesDB, Storage } from 'node-appwrite';
+import { createAppwriteClient } from '#lib/services/appwrite.service';
 // import { GatewayIntentBits, Partials } from 'discord.js';
 
 const client = new SapphireClient({
