@@ -1,0 +1,217 @@
+{
+    "projectId": "692f47690000ed5fd2bc",
+    "endpoint": "https://sgp.cloud.appwrite.io/v1",
+    "projectName": "Confidential Attachments Discord Bot",
+    "settings": {
+        "services": {
+            "account": true,
+            "avatars": true,
+            "databases": true,
+            "locale": true,
+            "health": true,
+            "storage": true,
+            "teams": true,
+            "users": true,
+            "sites": true,
+            "functions": true,
+            "graphql": true,
+            "messaging": true
+        },
+        "auth": {
+            "methods": {
+                "jwt": true,
+                "phone": true,
+                "invites": true,
+                "anonymous": true,
+                "email-otp": true,
+                "magic-url": true,
+                "email-password": true
+            },
+            "security": {
+                "duration": 31536000,
+                "limit": 0,
+                "sessionsLimit": 10,
+                "passwordHistory": 0,
+                "passwordDictionary": false,
+                "personalDataCheck": false,
+                "sessionAlerts": false,
+                "mockNumbers": []
+            }
+        }
+    },
+    "tablesDB": [
+        {
+            "$id": "6934694a0018e3521092",
+            "name": "Media Manager",
+            "enabled": true
+        }
+    ],
+    "tables": [
+        {
+            "$id": "media_items",
+            "$permissions": [],
+            "databaseId": "6934694a0018e3521092",
+            "name": "Items",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "storageFileId",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 24,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "guildId",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 20,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "channelId",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 20,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "messageId",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 20,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "authorId",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 20,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "type",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "elements": [
+                        "image",
+                        "video"
+                    ],
+                    "format": "enum",
+                    "default": null
+                },
+                {
+                    "key": "flags",
+                    "type": "string",
+                    "required": false,
+                    "array": true,
+                    "size": 16,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "hash",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "sizeBytes",
+                    "type": "integer",
+                    "required": true,
+                    "array": false,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807,
+                    "default": null
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "access_logs",
+            "$permissions": [],
+            "databaseId": "6934694a0018e3521092",
+            "name": "Access Logs",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "id",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "media_items",
+                    "relationType": "oneToMany",
+                    "twoWay": false,
+                    "twoWayKey": "69346d5000344164099f",
+                    "onDelete": "cascade",
+                    "side": "parent"
+                },
+                {
+                    "key": "viewerId",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 20,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "guildId",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 20,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "channelId",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 20,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "jobId",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 12,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "accessType",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "elements": [
+                        "first_time",
+                        "repeat_view"
+                    ],
+                    "format": "enum",
+                    "default": null
+                }
+            ],
+            "indexes": []
+        }
+    ]
+}
