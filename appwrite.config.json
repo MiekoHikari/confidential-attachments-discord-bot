@@ -151,7 +151,7 @@
             "rowSecurity": false,
             "columns": [
                 {
-                    "key": "id",
+                    "key": "itemId",
                     "type": "relationship",
                     "required": false,
                     "array": false,

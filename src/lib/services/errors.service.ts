@@ -11,7 +11,9 @@ export const ErrorCodes = {
 
 	FfmpegNotFound: 'E008',
 	DownloadError: 'E009',
-	DuplicateFileError: 'E010'
+	DuplicateFileError: 'E010',
+
+	FileNotFound: 'E011'
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
@@ -26,7 +28,8 @@ export const ErrorMessages: Record<ErrorCode, string> = {
 	[ErrorCodes.EnvironmentConfigurationError]: 'The environment variable is not configured properly: ',
 	[ErrorCodes.FfmpegNotFound]: 'FFmpeg is not installed or not found in the system path.',
 	[ErrorCodes.DownloadError]: 'Failed to download the file from the provided URL.',
-	[ErrorCodes.DuplicateFileError]: 'A file with the same content has already been uploaded: '
+	[ErrorCodes.DuplicateFileError]: 'A file with the same content has already been uploaded: ',
+	[ErrorCodes.FileNotFound]: 'The requested file was not found.'
 };
 
 export function getErrorMessage(code: ErrorCode): string {
