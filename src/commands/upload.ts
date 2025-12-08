@@ -1,5 +1,6 @@
 // TODO: Interaction Timeout handling for large files
 // TODO: Turn Repository into Monorepo for better structure and create an upload container queue
+import { maxFileSizeInBytes, validExtensions, validImageTypes, validVideoTypes } from '#lib/constants';
 import { bufferToFile, createStorageFile, duplicateHashExists } from '#lib/services/appwrite.service';
 import { attachmentAnnounceEmbed } from '#lib/services/cams.service';
 import { sha256Hash } from '#lib/services/crypto.service';
@@ -9,12 +10,6 @@ import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
 import { ActionRowBuilder, Attachment, ButtonBuilder, ButtonStyle, MessageActionRowComponentBuilder } from 'discord.js';
 import { ID } from 'node-appwrite';
-
-// Discord Supported file types
-const validImageTypes = ['image/jpeg', 'image/png', 'image/gif'];
-const validVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-matroska'];
-const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mov', '.mkv'];
-const maxFileSizeInBytes = 499.9 * 1024 * 1024;
 
 @ApplyOptions<Command.Options>({
 	description: 'Upload images/videos as confidential attachments',
