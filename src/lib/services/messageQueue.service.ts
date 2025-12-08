@@ -1,4 +1,4 @@
-import { Queue } from 'bullmq';
+import { Queue, QueueEvents } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
 import z from 'zod';
 
@@ -7,7 +7,6 @@ export const newJobSchema = z.object({
 	jobId: z.string().min(1),
 	type: z.enum(['image', 'video']),
 	filename: z.string().min(1),
-	responseUrl: z.url(),
 	watermarkText: z.string().min(1),
 	interaction: z.object({
 		applicationId: z.string().min(1),
@@ -15,6 +14,19 @@ export const newJobSchema = z.object({
 		messageId: z.string().min(1)
 	})
 });
+
+export interface watermarkJob {
+	container: string;
+	jobId: string;
+	type: 'image' | 'video';
+	filename: string;
+	watermarkText: string;
+	interaction: {
+		applicationId: string;
+		token: string;
+		messageId: string;
+	};
+}
 
 // Redis connection config shared between Queue and Worker
 export const redisConnection: ConnectionOptions = {
@@ -31,7 +43,7 @@ export const redisConnection: ConnectionOptions = {
 };
 
 // Queue for watermark processing jobs
-export const watermarkQueue = new Queue('watermark', {
+export const watermarkQueue = new Queue<watermarkJob>('watermark', {
 	connection: redisConnection,
 	defaultJobOptions: {
 		attempts: 3,
@@ -42,4 +54,8 @@ export const watermarkQueue = new Queue('watermark', {
 		removeOnComplete: 10, // Keep last 10 completed jobs
 		removeOnFail: 100 // Keep last 100 failed jobs for debugging
 	}
+});
+
+export const watermarkQueueEvents = new QueueEvents('watermark', {
+	connection: redisConnection
 });
