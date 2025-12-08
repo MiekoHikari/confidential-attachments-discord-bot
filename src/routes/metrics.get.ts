@@ -1,4 +1,4 @@
-import { watermarkQueue } from '#lib/mq';
+import { watermarkQueue } from '#lib/services/messageQueue.service';
 import { Route } from '@sapphire/plugin-api';
 
 export class UserRoute extends Route {
