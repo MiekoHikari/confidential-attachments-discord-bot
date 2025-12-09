@@ -1,7 +1,6 @@
 import { UserError } from '@sapphire/framework';
 import { ErrorCodes, generateFailure } from './errors.service';
 import { Client, Query, Storage, TablesDB } from 'node-appwrite';
-import { AccessLogs, Items } from '#lib/types/appwrite';
 
 /**
  * This function creates an Appwrite client.
@@ -45,24 +44,4 @@ export async function duplicateHashExists(Tables: TablesDB, itemHash: string, gu
 	});
 
 	return existingItems.total > 0;
-}
-
-export async function getItemById(Tables: TablesDB, itemId: string) {
-	const item = await Tables.getRow<Items>({
-		databaseId: process.env.APPWRITE_DATABASE_ID!,
-		tableId: 'media_items',
-		rowId: itemId
-	});
-
-	return item;
-}
-
-export async function getAccessLogByViewerId(Tables: TablesDB, viewerId: string, itemId: string) {
-	const accessLogs = await Tables.listRows<AccessLogs>({
-		databaseId: process.env.APPWRITE_DATABASE_ID!,
-		tableId: 'access_logs',
-		queries: [Query.equal('viewerId', viewerId), Query.equal('id', itemId), Query.limit(1)]
-	});
-
-	return accessLogs;
 }
