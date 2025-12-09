@@ -5,7 +5,7 @@ import { bufferToFile, createStorageFile, duplicateHashExists } from '#lib/servi
 import { attachmentAnnounceEmbed } from '#lib/services/cams.service';
 import { sha256Hash } from '#lib/services/crypto.service';
 import { ErrorCodes, generateFailure } from '#lib/services/errors.service';
-import { Items } from '#lib/types/appwrite';
+import { Items, ItemsType } from '#lib/types/appwrite';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
 import { ActionRowBuilder, Attachment, ButtonBuilder, ButtonStyle, MessageActionRowComponentBuilder } from 'discord.js';
@@ -106,14 +106,10 @@ export class UserCommand extends Command {
 
 			const message = await interaction.editReply({ content: 'File uploaded successfully as a confidential attachment.' });
 
-			const { rows } = await this.createAppwriteItemRows(interaction, [storageItem], message.id);
+			const row = await this.createAppwriteItemRow(interaction, storageItem, message.id);
 
 			const actionRow1 = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-				new ButtonBuilder()
-					.setLabel(attachments[0].name)
-					.setCustomId(`viewFile#${rows[0].$id}`)
-					.setStyle(ButtonStyle.Secondary)
-					.setEmoji('📁')
+				new ButtonBuilder().setLabel(attachments[0].name).setCustomId(`viewFile#${row.$id}`).setStyle(ButtonStyle.Secondary).setEmoji('📁')
 			);
 
 			return interaction.channel.send({
@@ -140,31 +136,33 @@ export class UserCommand extends Command {
 
 		return {
 			storageFileId: storageItem.$id,
-			type: validImageTypes.includes(attachment.contentType || '') ? 'image' : 'video',
+			type: validImageTypes.includes(attachment.contentType || '') ? ItemsType.IMAGE : ItemsType.VIDEO,
 			hash: itemHash,
 			sizeBytes: attachment.size
 		};
 	}
 
-	private async createAppwriteItemRows(
+	private async createAppwriteItemRow(
 		interaction: Command.ChatInputCommandInteraction,
-		storageItems: { storageFileId: string; type: string; hash: string; sizeBytes: number }[],
+		storageItem: { storageFileId: string; type: ItemsType; hash: string; sizeBytes: number },
 		messageId: string
 	) {
-		return await this.container.appwriteTablesDb.createRows<Items>({
+		return await this.container.appwriteTablesDb.createRow<Items>({
 			databaseId: process.env.APPWRITE_DATABASE_ID!,
-			tableId: 'media_items'!,
-			rows: storageItems.map((item) => ({
-				storageFileId: item.storageFileId,
+			tableId: 'media_items',
+			rowId: ID.unique(),
+			data: {
+				storageFileId: storageItem.storageFileId,
 				guildId: interaction.guildId!,
 				channelId: interaction.channelId!,
 				messageId: messageId,
 				authorId: interaction.user.id,
-				type: item.type,
-				hash: item.hash,
-				sizeBytes: item.sizeBytes,
-				flags: null
-			}))
+				type: storageItem.type,
+				flags: null,
+				hash: storageItem.hash,
+				sizeBytes: storageItem.sizeBytes,
+				accessLogs: []
+			}
 		});
 	}
 
