@@ -13,7 +13,10 @@ export const ErrorCodes = {
 	DownloadError: 'E009',
 	DuplicateFileError: 'E010',
 
-	FileNotFound: 'E011'
+	FileNotFound: 'E011',
+	JobNotFound: 'E012',
+
+	DataInconsistencyError: 'E013'
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
@@ -29,7 +32,9 @@ export const ErrorMessages: Record<ErrorCode, string> = {
 	[ErrorCodes.FfmpegNotFound]: 'FFmpeg is not installed or not found in the system path.',
 	[ErrorCodes.DownloadError]: 'Failed to download the file from the provided URL.',
 	[ErrorCodes.DuplicateFileError]: 'A file with the same content has already been uploaded: ',
-	[ErrorCodes.FileNotFound]: 'The requested file was not found.'
+	[ErrorCodes.FileNotFound]: 'The requested file was not found.',
+	[ErrorCodes.JobNotFound]: 'The requested job was not found.',
+	[ErrorCodes.DataInconsistencyError]: 'Data inconsistency detected: '
 };
 
 export function getErrorMessage(code: ErrorCode): string {
