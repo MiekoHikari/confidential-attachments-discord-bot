@@ -35,6 +35,7 @@
     "@swc/core": "^1.10.8",
     "@types/node": "^22.10.7",
     "@types/ws": "^8.5.13",
+    "appwrite-cli": "^12.0.1",
     "npm-run-all2": "^7.0.2",
     "prettier": "^3.4.2",
     "tsc-watch": "^6.3.0",
@@ -48,7 +49,8 @@
     "start": "node dist/index.js",
     "dev": "run-s build start",
     "watch:start": "tsc-watch --onSuccess \"node ./dist/index.js\"",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "appwrite:update": "appwrite pull tables && appwrite types src/lib/types"
   },
   "prettier": "@sapphire/prettier-config"
 }
