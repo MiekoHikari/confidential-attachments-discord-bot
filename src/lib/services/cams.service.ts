@@ -1,4 +1,4 @@
-import { EmbedBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageActionRowComponentBuilder } from 'discord.js';
 
 export function attachmentAnnounceEmbed(userId: string, length: number) {
 	return new EmbedBuilder()
@@ -12,3 +12,8 @@ export function attachmentAnnounceEmbed(userId: string, length: number) {
 		.setThumbnail('https://cdn3.emoji.gg/emojis/73057-anonymous.png')
 		.setTimestamp();
 }
+
+export const refreshButtonRow = (jobId: string) => new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(refreshButton(jobId));
+
+export const refreshButton = (jobId: string) =>
+	new ButtonBuilder().setLabel('Refresh Status').setCustomId(`refresh#${jobId}`).setStyle(ButtonStyle.Primary).setEmoji('✨');
