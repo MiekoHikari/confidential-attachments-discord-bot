@@ -8,11 +8,7 @@ export const newJobSchema = z.object({
 	type: z.enum(['image', 'video']),
 	filename: z.string().min(1),
 	watermarkText: z.string().min(1),
-	interaction: z.object({
-		applicationId: z.string().min(1),
-		token: z.string().min(1),
-		messageId: z.string().min(1)
-	})
+	appwriteItemId: z.string()
 });
 
 export interface watermarkJob {
@@ -21,11 +17,7 @@ export interface watermarkJob {
 	type: 'image' | 'video';
 	filename: string;
 	watermarkText: string;
-	interaction: {
-		applicationId: string;
-		token: string;
-		messageId: string;
-	};
+	appwriteItemId: string;
 }
 
 // Redis connection config shared between Queue and Worker
