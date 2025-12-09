@@ -49,7 +49,12 @@
     "tables": [
         {
             "$id": "media_items",
-            "$permissions": [],
+            "$permissions": [
+                "create(\"any\")",
+                "read(\"any\")",
+                "update(\"any\")",
+                "delete(\"any\")"
+            ],
             "databaseId": "6934694a0018e3521092",
             "name": "Items",
             "enabled": true,
@@ -138,30 +143,35 @@
                     "min": -9223372036854775808,
                     "max": 9223372036854775807,
                     "default": null
+                },
+                {
+                    "key": "accessLogs",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "access_logs",
+                    "relationType": "manyToOne",
+                    "twoWay": true,
+                    "twoWayKey": "item",
+                    "onDelete": "setNull",
+                    "side": "child"
                 }
             ],
             "indexes": []
         },
         {
             "$id": "access_logs",
-            "$permissions": [],
+            "$permissions": [
+                "create(\"any\")",
+                "read(\"any\")",
+                "update(\"any\")",
+                "delete(\"any\")"
+            ],
             "databaseId": "6934694a0018e3521092",
             "name": "Access Logs",
             "enabled": true,
             "rowSecurity": false,
             "columns": [
-                {
-                    "key": "itemId",
-                    "type": "relationship",
-                    "required": false,
-                    "array": false,
-                    "relatedTable": "media_items",
-                    "relationType": "oneToMany",
-                    "twoWay": false,
-                    "twoWayKey": "69346d5000344164099f",
-                    "onDelete": "cascade",
-                    "side": "parent"
-                },
                 {
                     "key": "viewerId",
                     "type": "string",
@@ -190,15 +200,6 @@
                     "encrypt": false
                 },
                 {
-                    "key": "jobId",
-                    "type": "string",
-                    "required": true,
-                    "array": false,
-                    "size": 12,
-                    "default": null,
-                    "encrypt": false
-                },
-                {
                     "key": "accessType",
                     "type": "string",
                     "required": true,
@@ -209,6 +210,79 @@
                     ],
                     "format": "enum",
                     "default": null
+                },
+                {
+                    "key": "completedJob",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "completed_jobs",
+                    "relationType": "oneToMany",
+                    "twoWay": true,
+                    "twoWayKey": "accessLog",
+                    "onDelete": "cascade",
+                    "side": "child"
+                },
+                {
+                    "key": "item",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "media_items",
+                    "relationType": "manyToOne",
+                    "twoWay": true,
+                    "twoWayKey": "accessLogs",
+                    "onDelete": "setNull",
+                    "side": "parent"
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "completed_jobs",
+            "$permissions": [
+                "create(\"any\")",
+                "read(\"any\")",
+                "update(\"any\")",
+                "delete(\"any\")"
+            ],
+            "databaseId": "6934694a0018e3521092",
+            "name": "Completed Jobs",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "jobId",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "uploadItem",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "media_items",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "completedJobs",
+                    "onDelete": "cascade",
+                    "side": "parent"
+                },
+                {
+                    "key": "accessLog",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "access_logs",
+                    "relationType": "oneToMany",
+                    "twoWay": true,
+                    "twoWayKey": "completedJob",
+                    "onDelete": "cascade",
+                    "side": "parent"
                 }
             ],
             "indexes": []
