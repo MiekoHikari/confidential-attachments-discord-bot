@@ -1,87 +1,53 @@
 // TODO: Interaction Timeout handling for large files
 // TODO: Turn Repository into Monorepo for better structure and create an upload container queue
+// TODO: Parallel Process Multiple Attachments within 15 minute interaction window
 import { maxFileSizeInBytes, validExtensions, validImageTypes, validVideoTypes } from '#lib/constants';
-import { bufferToFile, createStorageFile, duplicateHashExists } from '#lib/services/appwrite.service';
-import { attachmentAnnounceEmbed } from '#lib/services/cams.service';
+import { bufferToFile, duplicateHashExists } from '#lib/services/appwrite.service';
 import { sha256Hash } from '#lib/services/crypto.service';
 import { ErrorCodes, generateFailure } from '#lib/services/errors.service';
 import { Items, ItemsType } from '#lib/types/appwrite';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
-import { ActionRowBuilder, Attachment, ButtonBuilder, ButtonStyle, MessageActionRowComponentBuilder } from 'discord.js';
+import { ActionRowBuilder, Attachment, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageActionRowComponentBuilder } from 'discord.js';
 import { ID } from 'node-appwrite';
 
 @ApplyOptions<Command.Options>({
 	description: 'Upload images/videos as confidential attachments',
-	preconditions: ['activePeriod']
+	preconditions: ['activePeriod'],
+	cooldownDelay: 150_000,
+	requiredClientPermissions: ['SendMessages', 'EmbedLinks', 'AttachFiles']
 })
 export class UserCommand extends Command {
 	public override registerApplicationCommands(registry: Command.Registry) {
-		registry.registerChatInputCommand((builder) =>
-			builder //
-				.setName(this.name)
-				.setDescription(this.description)
-				.addAttachmentOption((option) =>
-					option //
-						.setName('file1')
-						.setDescription('Please upload an image/video file')
-						.setRequired(true)
-				)
-				.addAttachmentOption((option) =>
-					option //
-						.setName('file2')
-						.setDescription('Please upload an image/video file')
-						.setRequired(false)
-				)
-				.addAttachmentOption((option) =>
-					option //
-						.setName('file3')
-						.setDescription('Please upload an image/video file')
-						.setRequired(false)
-				)
-				.addAttachmentOption((option) =>
-					option //
-						.setName('file4')
-						.setDescription('Please upload an image/video file')
-						.setRequired(false)
-				)
-				.addAttachmentOption((option) =>
-					option //
-						.setName('file5')
-						.setDescription('Please upload an image/video file')
-						.setRequired(false)
-				)
-				.addAttachmentOption((option) =>
-					option //
-						.setName('file6')
-						.setDescription('Please upload an image/video file')
-						.setRequired(false)
-				)
-				.addAttachmentOption((option) =>
-					option //
-						.setName('file7')
-						.setDescription('Please upload an image/video file')
-						.setRequired(false)
-				)
-				.addAttachmentOption((option) =>
-					option //
-						.setName('file8')
-						.setDescription('Please upload an image/video file')
-						.setRequired(false)
-				)
-				.addAttachmentOption((option) =>
-					option //
-						.setName('file9')
-						.setDescription('Please upload an image/video file')
-						.setRequired(false)
-				)
-				.addAttachmentOption((option) =>
-					option //
-						.setName('file10')
-						.setDescription('Please upload an image/video file')
-						.setRequired(false)
-				)
-		);
+		registry.registerChatInputCommand((builder) => {
+			const command = builder.setName(this.name).setDescription(this.description!);
+
+			for (let i = 1; i <= 10; i++) {
+				command.addAttachmentOption((option) =>
+					option
+						.setName(`file${i}`)
+						.setDescription(
+							`Media can be images or videos. Max file size is ${maxFileSizeInBytes / (1024 * 1024)} MB. The bigger the file, the longer the upload time.`
+						)
+						.setRequired(i === 1)
+				);
+			}
+
+			return command;
+		});
+	}
+
+	private attachmentAnnounceEmbed(userId: string, length: number) {
+		return new EmbedBuilder()
+			.setColor('White')
+			.setDescription(
+				`### <@${userId}> has just uploaded ${length} file${length !== 1 ? 's' : ''}! \
+            \n> - Click the button(s) below to view the uploaded media. \
+            \n> - A watermark will be applied when you click the button. Generation may take a few moments depending on the file size. \
+            \n> - **Do not share these files outside of this server!**`
+			)
+			.setThumbnail('https://cdn3.emoji.gg/emojis/73057-anonymous.png')
+			.setTimestamp();
 	}
 
 	public override async chatInputRun(interaction: Command.ChatInputCommandInteraction) {
@@ -94,9 +60,8 @@ export class UserCommand extends Command {
 				);
 
 			const attachments = this.extractAttachmentsFromInteraction(interaction);
-			const validTypes = [...validImageTypes, ...validVideoTypes];
 
-			const attachmentErrors = this.validateAttachments(attachments, validTypes, maxFileSizeInBytes);
+			const attachmentErrors = this.validateAttachments(attachments);
 
 			if (attachmentErrors.length > 0) {
 				throw new UserError(generateFailure(ErrorCodes.UploadFailed, { errors: attachmentErrors }));
@@ -109,12 +74,16 @@ export class UserCommand extends Command {
 			const row = await this.createAppwriteItemRow(interaction, storageItem, message.id);
 
 			const actionRow1 = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-				new ButtonBuilder().setLabel(attachments[0].name).setCustomId(`viewFile#${row.$id}`).setStyle(ButtonStyle.Secondary).setEmoji('📁')
+				new ButtonBuilder()
+					.setLabel(attachments[0].name)
+					.setCustomId(`viewFile#${row.$id}`)
+					.setStyle(ButtonStyle.Secondary)
+					.setEmoji(storageItem.type === ItemsType.IMAGE ? '🖼️' : '🎬')
 			);
 
 			return interaction.channel.send({
 				components: [actionRow1],
-				embeds: [attachmentAnnounceEmbed(interaction.user.id, attachments.length)]
+				embeds: [this.attachmentAnnounceEmbed(interaction.user.id, attachments.length)]
 			});
 		} catch (error) {
 			throw error;
@@ -132,7 +101,11 @@ export class UserCommand extends Command {
 		const fileId = ID.unique();
 		const file = bufferToFile(fileBuffer, attachment.name || 'unknown', attachment.contentType || 'application/octet-stream');
 
-		const storageItem = await createStorageFile(this.container.appwriteStorageClient, process.env.APPWRITE_BUCKET_ID!, fileId, file);
+		const storageItem = await this.container.appwriteStorageClient.createFile({
+			bucketId: process.env.APPWRITE_BUCKET_ID!,
+			fileId: fileId,
+			file: file
+		});
 
 		return {
 			storageFileId: storageItem.$id,
@@ -177,8 +150,9 @@ export class UserCommand extends Command {
 		return attachments;
 	}
 
-	private validateAttachments(attachments: Attachment[], validTypes: string[], maxSizeInBytes: number): UserError[] {
+	private validateAttachments(attachments: Attachment[]): UserError[] {
 		const errors: UserError[] = [];
+		const validTypes = [...validImageTypes, ...validVideoTypes];
 
 		// 1. Check file types
 		const invalidTypeAttachments = attachments.filter((attachment) => !this.validateFileType(attachment, validTypes));
@@ -186,7 +160,7 @@ export class UserCommand extends Command {
 			errors.push(new UserError(generateFailure(ErrorCodes.InvalidFileType, { invalidFiles: invalidTypeAttachments.map((a) => a.name) })));
 		}
 
-		const oversizedAttachments = attachments.filter((attachment) => !this.validateFileSize(attachment, maxSizeInBytes));
+		const oversizedAttachments = attachments.filter((attachment) => !this.validateFileSize(attachment, maxFileSizeInBytes));
 		if (oversizedAttachments.length > 0) {
 			errors.push(
 				new UserError(
