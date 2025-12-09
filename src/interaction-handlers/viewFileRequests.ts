@@ -1,46 +1,55 @@
 import { validImageTypes } from '#lib/constants';
-import { getAccessLogByViewerId, getItemById } from '#lib/services/appwrite.service';
+import { refreshButtonRow } from '#lib/services/cams.service';
 import { encodeId } from '#lib/services/crypto.service';
 import { ErrorCodes, generateFailure } from '#lib/services/errors.service';
-import { newJobSchema, watermarkQueue } from '#lib/services/messageQueue.service';
-import { AccessLogs, AccessLogsAccessType, Items } from '#lib/types/appwrite';
+import { watermarkJob, watermarkQueue } from '#lib/services/messageQueue.service';
+import { AccessLogs, AccessLogsAccessType, CompletedJobs, Items } from '#lib/types/appwrite';
 import { ApplyOptions } from '@sapphire/decorators';
 import { InteractionHandler, InteractionHandlerTypes, UserError } from '@sapphire/framework';
-import {
-	ActionRowBuilder,
-	AttachmentBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	EmbedBuilder,
-	MessageActionRowComponentBuilder,
-	type ButtonInteraction
-} from 'discord.js';
-import { ID, Models } from 'node-appwrite';
+import { AttachmentBuilder, EmbedBuilder, type ButtonInteraction } from 'discord.js';
+import { ID, Models, Query } from 'node-appwrite';
 
 @ApplyOptions<InteractionHandler.Options>({
 	interactionHandlerType: InteractionHandlerTypes.Button
 })
 export class ButtonHandler extends InteractionHandler {
-	public async run(interaction: ButtonInteraction, fileId: string) {
+	public async run(interaction: ButtonInteraction, rowId: string) {
 		await interaction.deferReply({ ephemeral: true });
 
-		const item = await getItemById(this.container.appwriteTablesDb, fileId);
-		if (!item) throw new UserError(generateFailure(ErrorCodes.FileNotFound, { errors: [`Item with ID ${fileId} not found.`] }));
+		const item =
+			(await this.container.appwriteTablesDb.getRow<Items>({
+				databaseId: process.env.APPWRITE_DATABASE_ID!,
+				tableId: 'media_items',
+				rowId
+			})) ?? null;
+		if (!item) throw new UserError(generateFailure(ErrorCodes.FileNotFound, { errors: [`Item with ID ${rowId} not found.`] }));
 
 		const File = await this.getAppwriteFileDetails(item.storageFileId);
 		if (!File)
 			throw new UserError(generateFailure(ErrorCodes.FileNotFound, { errors: [`Storage file with ID ${item.storageFileId} not found.`] }));
 
-		const { rows: accessLogs } = await getAccessLogByViewerId(this.container.appwriteTablesDb, interaction.user.id, item.$id);
+		const accessLogs = await this.container.appwriteTablesDb.listRows<AccessLogs>({
+			databaseId: process.env.APPWRITE_DATABASE_ID!,
+			tableId: 'access_logs',
+			queries: [
+				Query.select(['completedJob.$id', 'completedJob.jobId', 'item.$id', '$id', '$createdAt']),
+				Query.equal('viewerId', interaction.user.id),
+				Query.limit(100)
+			]
+		});
 
-		if (accessLogs.length === 0) {
-			return await this.createWatermarkJob(interaction, File.storageFile, File.metadata);
+		// Until appwrite supports relations in queries, we need to filter manually
+		const filteredLogs = accessLogs.rows.filter((log) => log.item.$id === item.$id);
+
+		if (filteredLogs.length === 0) {
+			return await this.createWatermarkJob(interaction, File.storageFile, File.metadata, item.$id);
 		} else {
-			const latestRecord = accessLogs.reduce((prev, current) => (prev.$createdAt > current.$createdAt ? prev : current));
+			const latestRecord = filteredLogs.reduce((prev, current) => (prev.$createdAt > current.$createdAt ? prev : current));
 
 			if (this.hasDaysPassed(latestRecord, 7)) {
-				return this.createWatermarkJob(interaction, File.storageFile, File.metadata);
+				return this.createWatermarkJob(interaction, File.storageFile, File.metadata, item.$id);
 			} else {
+				console.log(latestRecord);
 				const attachment = await this.repeatView(interaction, item, latestRecord);
 
 				return await interaction.editReply({
@@ -69,19 +78,20 @@ export class ButtonHandler extends InteractionHandler {
 		return { storageFile, metadata };
 	}
 
-	private async createWatermarkJob(interaction: ButtonInteraction, file: ArrayBuffer, metadata: Models.File) {
+	private async createWatermarkJob(interaction: ButtonInteraction, file: ArrayBuffer, metadata: Models.File, itemId: string) {
 		const jobId = `${encodeId(interaction.user.id)}#${encodeId(Date.now().toString())}`;
 
 		const blobClient = this.container.blobContainerClient.getBlockBlobClient(jobId);
 		await blobClient.uploadData(file);
 
-		const job = newJobSchema.parse({
+		const job: watermarkJob = {
 			container: blobClient.containerName,
 			jobId,
 			type: validImageTypes.includes(metadata.mimeType) ? 'image' : 'video',
 			filename: `${jobId}.${metadata.mimeType.split('/').pop()}`,
-			watermarkText: jobId
-		});
+			watermarkText: jobId,
+			appwriteItemId: itemId
+		};
 
 		return await watermarkQueue
 			.add('watermark', job, {
@@ -103,11 +113,9 @@ export class ButtonHandler extends InteractionHandler {
 			.setThumbnail('https://cdn3.emoji.gg/emojis/31274-waiting-ids.png')
 			.setTimestamp();
 
-		const refreshButtonRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-			new ButtonBuilder().setLabel('Refresh Status').setCustomId(`refresh#${jobId}`).setStyle(ButtonStyle.Primary).setEmoji('✨')
-		);
+		const refreshButtonRowComponent = refreshButtonRow(jobId);
 
-		return await interaction.editReply({ embeds: [embed], components: [refreshButtonRow] });
+		return await interaction.editReply({ embeds: [embed], components: [refreshButtonRowComponent] });
 	}
 
 	private async repeatView(interaction: ButtonInteraction, item: Items, latestRecord: AccessLogs) {
@@ -116,29 +124,35 @@ export class ButtonHandler extends InteractionHandler {
 			tableId: 'access_logs',
 			rowId: ID.unique(),
 			data: {
-				itemId: [item.$id] as unknown as Items[],
+				item: item.$id as unknown as Items,
 				viewerId: interaction.user.id,
 				guildId: item.guildId,
 				channelId: item.channelId,
-				jobId: latestRecord.jobId,
-				accessType: AccessLogsAccessType.REPEAT_VIEW
+				accessType: AccessLogsAccessType.REPEAT_VIEW,
+				completedJob: latestRecord.completedJob.$id as unknown as CompletedJobs
 			}
 		});
 
 		// Get existing file
-		const blobItem = this.container.blobContainerClient.getBlockBlobClient(`processed/${latestRecord.jobId}`);
+		const blobItem = this.container.blobContainerClient.getBlockBlobClient(`processed/${latestRecord.completedJob.jobId}`);
 		const exists = await blobItem.exists();
 
 		if (!exists) {
-			throw new UserError(generateFailure(ErrorCodes.FileNotFound, { errors: [`Processed file for Job ID ${latestRecord.jobId} not found.`] }));
+			throw new UserError(
+				generateFailure(ErrorCodes.FileNotFound, { errors: [`Processed file for Job ID ${latestRecord.completedJob.jobId} not found.`] })
+			);
 		}
 
 		const download = await blobItem.downloadToBuffer();
 		if (download.length === 0) {
-			throw new UserError(generateFailure(ErrorCodes.FileNotFound, { errors: [`Processed file for Job ID ${latestRecord.jobId} not found.`] }));
+			throw new UserError(
+				generateFailure(ErrorCodes.FileNotFound, { errors: [`Processed file for Job ID ${latestRecord.completedJob.jobId} not found.`] })
+			);
 		}
 
-		const attachment = new AttachmentBuilder(download, { name: `${logItem.$id}.${blobItem.name.split('.').pop()}` });
+		const properties = await blobItem.getProperties();
+
+		const attachment = new AttachmentBuilder(download, { name: `${logItem.$id}.${properties.contentType?.split('/').pop()}` });
 		return attachment;
 	}
 
@@ -150,9 +164,9 @@ export class ButtonHandler extends InteractionHandler {
 	}
 
 	public override parse(interaction: ButtonInteraction) {
-		const [command, id] = interaction.customId.split('#');
+		const [command, rowId] = interaction.customId.split('#');
 		if (command !== 'viewFile') return this.none();
 
-		return this.some(id);
+		return this.some(rowId);
 	}
 }
