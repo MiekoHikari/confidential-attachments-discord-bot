@@ -21,7 +21,7 @@ export class UserCommand extends Command {
 					option
 						.setName(`file${i}`)
 						.setDescription(
-							`Media can be images or videos. Max file size is ${maxFileSizeInBytes / (1024 * 1024)} MB. The bigger the file, the longer the upload time.`
+							`Media can be images or videos. The bigger the file, the longer the upload time. [MAX ${maxFileSizeInBytes / (1024 * 1024)} MB]`
 						)
 						.setRequired(i === 1)
 				);

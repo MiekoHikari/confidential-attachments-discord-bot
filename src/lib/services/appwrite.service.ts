@@ -165,6 +165,21 @@ export class Appwrite {
 		});
 	}
 
+	public async createCompletedJobEntry(jobId: string, uploadItemId: string) {
+		const rowId = ID.unique();
+
+		return await this.tablesDb.createRow<CompletedJobs>({
+			databaseId: this.config.databaseId,
+			tableId: 'completed_jobs',
+			rowId: rowId,
+			data: {
+				jobId,
+				uploadItem: uploadItemId as unknown as Items,
+				accessLog: []
+			}
+		});
+	}
+
 	public async getProcessedJob(jobId: string) {
 		const blobItem = this.azureBlobContainerClient.getBlockBlobClient(`processed/${jobId}`);
 		const exists = await blobItem.exists();
