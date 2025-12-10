@@ -27,11 +27,7 @@ colorette.createColors({ useColor: true });
 declare module '@skyra/env-utilities' {
 	interface Env {
 		// Appwrite Tokens
-		APPWRITE_ENDPOINT: string;
-		APPWRITE_PROJECT_ID: string;
 		APPWRITE_API_KEY: string;
-		APPWRITE_DATABASE_ID: string;
-		APPWRITE_BUCKET_ID: string;
 
 		// Azure Tokens
 		AZURE_STORAGE_CONNECTION_STRING: string;

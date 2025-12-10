@@ -1,8 +1,11 @@
 import { UserError } from '@sapphire/framework';
 import { ErrorCodes, generateFailure } from './errors.service';
-import { Client, ID, Query, Storage, TablesDB } from 'node-appwrite';
+import { Client, ID, Models, Query, Storage, TablesDB } from 'node-appwrite';
 import { Attachment } from 'discord.js';
-import { Items, ItemsType } from '#lib/types/appwrite';
+import { AccessLogs, AccessLogsAccessType, CompletedJobs, Items, ItemsType } from '#lib/types/appwrite';
+import { encodeId } from './crypto.service';
+import { watermarkJob, watermarkQueue } from './messageQueue.service';
+import { ContainerClient } from '@azure/storage-blob';
 
 interface AppwriteServiceConfig {
 	endPoint: string;
@@ -10,6 +13,7 @@ interface AppwriteServiceConfig {
 	apiKey: string;
 	bucketId: string;
 	databaseId: string;
+	azureBlobContainerClient: ContainerClient;
 }
 
 interface MediaItem {
@@ -22,8 +26,10 @@ interface MediaItem {
 export class Appwrite {
 	private client: Client;
 	private config: AppwriteServiceConfig;
+
 	public storageClient: Storage;
 	public tablesDb: TablesDB;
+	public azureBlobContainerClient: ContainerClient;
 
 	constructor(config: AppwriteServiceConfig) {
 		this.config = config;
@@ -31,6 +37,8 @@ export class Appwrite {
 
 		this.storageClient = new Storage(this.client);
 		this.tablesDb = new TablesDB(this.client);
+
+		this.azureBlobContainerClient = config.azureBlobContainerClient;
 	}
 
 	public async uploadConfidentialMedia(attachment: Attachment, context: { guildId: string; authorId: string; channelId: string }) {
@@ -67,6 +75,98 @@ export class Appwrite {
 				messageId: messageId
 			}
 		});
+	}
+
+	public async getMediaItemById(rowId: string) {
+		return (
+			(await this.tablesDb.getRow<Items>({
+				databaseId: this.config.databaseId,
+				tableId: 'media_items',
+				rowId: rowId
+			})) ?? null
+		);
+	}
+
+	public async getStorageFile(fileId: string) {
+		const metadata = await this.storageClient.getFile({
+			bucketId: this.config.bucketId,
+			fileId
+		});
+
+		if (!metadata) return null;
+
+		const file = await this.storageClient.getFileDownload({
+			bucketId: this.config.bucketId,
+			fileId
+		});
+
+		return { file, metadata };
+	}
+
+	public async listViewerAccessLogs(userId: string, itemId: string) {
+		const accessLogs = await this.tablesDb.listRows<AccessLogs>({
+			databaseId: this.config.databaseId,
+			tableId: 'access_logs',
+			queries: [
+				Query.select(['completedJob.$id', 'completedJob.jobId', 'item.$id', '$id', '$createdAt']),
+				Query.equal('viewerId', userId),
+				Query.limit(100)
+			]
+		});
+
+		return accessLogs.rows.filter((log) => log.item.$id === itemId);
+	}
+
+	public async createWatermarkJob(userId: string, buffer: ArrayBuffer, metadata: Models.File, itemId: string) {
+		const jobId = `${encodeId(userId)}#${encodeId(Date.now().toString())}`;
+
+		const blobClient = this.azureBlobContainerClient.getBlockBlobClient(jobId);
+		await blobClient.uploadData(buffer);
+
+		const jobPayload: watermarkJob = {
+			container: blobClient.containerName,
+			jobId,
+			type: Appwrite.resolveFileType(metadata.mimeType) === ItemsType.IMAGE ? 'image' : 'video',
+			filename: `${jobId}.${metadata.mimeType.split('/').pop()}`,
+			watermarkText: jobId,
+			appwriteItemId: itemId
+		};
+
+		await watermarkQueue.add('watermark', jobPayload, { jobId });
+
+		return jobId;
+	}
+
+	public async createAccessLogEntry(userId: string, item: Items, completedJobRowId: string, type: AccessLogsAccessType) {
+		const rowId = ID.unique();
+
+		return await this.tablesDb.createRow<AccessLogs>({
+			databaseId: this.config.databaseId,
+			tableId: 'access_logs',
+			rowId: rowId,
+			data: {
+				viewerId: userId,
+				item: item.$id as unknown as Items,
+				completedJob: completedJobRowId as unknown as CompletedJobs,
+				accessType: type,
+				guildId: item.guildId,
+				channelId: item.channelId
+			}
+		});
+	}
+
+	public async getProcessedJob(jobId: string) {
+		const blobItem = this.azureBlobContainerClient.getBlockBlobClient(`processed/${jobId}`);
+		const exists = await blobItem.exists();
+
+		if (!exists) return null;
+
+		const downloadResponse = await blobItem.downloadToBuffer();
+		if (downloadResponse.length === 0) return null;
+
+		const properties = await blobItem.getProperties();
+
+		return { buffer: downloadResponse, contentType: properties.contentType || 'application/octet-stream' };
 	}
 
 	private async createMediaItemRow(mediaItem: MediaItem, context: { guildId: string; channelId: string; authorId: string }) {

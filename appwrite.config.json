@@ -287,5 +287,19 @@
             ],
             "indexes": []
         }
+    ],
+    "buckets": [
+        {
+            "$id": "6935b9f90010d69f16e2",
+            "$permissions": [],
+            "fileSecurity": false,
+            "name": "confidential-attachments",
+            "enabled": true,
+            "maximumFileSize": 5000000000,
+            "allowedFileExtensions": [],
+            "compression": "none",
+            "encryption": true,
+            "antivirus": true
+        }
     ]
 }

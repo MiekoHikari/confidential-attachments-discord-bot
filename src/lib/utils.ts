@@ -61,3 +61,10 @@ function getGuildInfo(guild: Guild | null) {
 	if (guild === null) return 'Direct Messages';
 	return `${guild.name}[${cyan(guild.id)}]`;
 }
+
+export function hasDaysPassed(timestamp: string, days: number): boolean {
+	const millisecondsInDay = 24 * 60 * 60 * 1000;
+	const dateTime = new Date(timestamp).getTime();
+	const currentTime = Date.now();
+	return currentTime - dateTime >= days * millisecondsInDay;
+}
