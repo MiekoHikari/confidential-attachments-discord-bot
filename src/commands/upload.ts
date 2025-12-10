@@ -1,6 +1,3 @@
-// TODO: Interaction Timeout handling for large files
-// TODO: Turn Repository into Monorepo for better structure and create an upload container queue
-// TODO: Parallel Process Multiple Attachments within 15 minute interaction window
 import { maxFileSizeInBytes, validExtensions, validImageTypes, validVideoTypes } from '#lib/constants';
 import { ErrorCodes, generateFailure } from '#lib/services/errors.service';
 import { ItemsType } from '#lib/types/appwrite';
