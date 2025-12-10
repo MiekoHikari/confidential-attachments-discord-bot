@@ -17,7 +17,7 @@ export type Items = Models.Row & {
 	storageFileId: string;
 	guildId: string;
 	channelId: string;
-	messageId: string;
+	messageId: string | null;
 	authorId: string;
 	type: ItemsType;
 	flags: string[] | null;

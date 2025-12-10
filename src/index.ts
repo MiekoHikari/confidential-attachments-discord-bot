@@ -4,7 +4,7 @@ import './lib/setup';
 
 import { container, LogLevel, SapphireClient } from '@sapphire/framework';
 import { TablesDB, Storage } from 'node-appwrite';
-import { createAppwriteClient } from '#lib/services/appwrite.service';
+import { Appwrite } from '#lib/services/appwrite.service';
 import { GatewayIntentBits } from 'discord.js';
 // import { GatewayIntentBits, Partials } from 'discord.js';
 
@@ -24,12 +24,15 @@ const client = new SapphireClient({
 	}
 });
 
-const appwriteClient = createAppwriteClient();
-
 const main = async () => {
 	try {
-		container.appwriteTablesDb = new TablesDB(appwriteClient);
-		container.appwriteStorageClient = new Storage(appwriteClient);
+		container.appwrite = new Appwrite({
+			endPoint: process.env.APPWRITE_ENDPOINT!,
+			projectId: process.env.APPWRITE_PROJECT_ID!,
+			apiKey: process.env.APPWRITE_API_KEY!,
+			bucketId: process.env.APPWRITE_BUCKET_ID!,
+			databaseId: process.env.APPWRITE_DATABASE_ID!
+		});
 
 		const blobServiceClient = BlobServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING!);
 		container.blobContainerClient = blobServiceClient.getContainerClient('cams');
@@ -46,6 +49,7 @@ const main = async () => {
 
 declare module '@sapphire/framework' {
 	interface Container {
+		appwrite: Appwrite;
 		appwriteTablesDb: TablesDB;
 		appwriteStorageClient: Storage;
 		blobContainerClient: ContainerClient;

@@ -90,7 +90,7 @@
                 {
                     "key": "messageId",
                     "type": "string",
-                    "required": true,
+                    "required": false,
                     "array": false,
                     "size": 20,
                     "default": null,

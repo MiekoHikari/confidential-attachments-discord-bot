@@ -16,7 +16,8 @@ export const ErrorCodes = {
 	FileNotFound: 'E011',
 	JobNotFound: 'E012',
 
-	DataInconsistencyError: 'E013'
+	DataInconsistencyError: 'E013',
+	InvalidFileTypeError: 'E014'
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
@@ -34,7 +35,8 @@ export const ErrorMessages: Record<ErrorCode, string> = {
 	[ErrorCodes.DuplicateFileError]: 'A file with the same content has already been uploaded: ',
 	[ErrorCodes.FileNotFound]: 'The requested file was not found.',
 	[ErrorCodes.JobNotFound]: 'The requested job was not found.',
-	[ErrorCodes.DataInconsistencyError]: 'Data inconsistency detected: '
+	[ErrorCodes.DataInconsistencyError]: 'Data inconsistency detected: ',
+	[ErrorCodes.InvalidFileTypeError]: 'The file type is invalid or unsupported: '
 };
 
 export function getErrorMessage(code: ErrorCode): string {
