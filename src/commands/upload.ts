@@ -51,6 +51,8 @@ export class UserCommand extends Command {
 				throw new UserError(generateFailure(ErrorCodes.UploadFailed, { errors: attachmentErrors }));
 			}
 
+			await interaction.editReply({ embeds: [this.attachmentUploadWarningEmbed()], components: [] });
+
 			const uploadResult = await this.container.appwrite.uploadConfidentialMedia(attachments[0], {
 				guildId: interaction.guildId!,
 				authorId: interaction.user.id,
@@ -65,10 +67,14 @@ export class UserCommand extends Command {
 					.setEmoji(uploadResult.mediaItem.type === ItemsType.IMAGE ? '🖼️' : '🎬')
 			);
 
-			return interaction.channel.send({
+			const message = await interaction.channel.send({
 				components: [actionRow1],
 				embeds: [this.attachmentAnnounceEmbed(interaction.user.id, attachments.length)]
 			});
+
+			await this.container.appwrite.updateMediaItemMessageId(uploadResult.row.$id, message.id);
+
+			return await interaction.editReply({ embeds: [this.attachmentUploadSuccessEmbed()], components: [] });
 		} catch (error) {
 			throw error;
 		}
@@ -85,6 +91,28 @@ export class UserCommand extends Command {
 			)
 			.setThumbnail('https://cdn3.emoji.gg/emojis/73057-anonymous.png')
 			.setTimestamp();
+	}
+
+	private attachmentUploadWarningEmbed() {
+		return new EmbedBuilder()
+			.setColor('Yellow')
+			.setDescription(
+				'### ⚠️ Your files are uploading... \
+			\n> - Depending on the file size, this may take a few moments. \
+			\n> - You will receive a confirmation message once the upload is complete.'
+			)
+			.setThumbnail('https://cdn3.emoji.gg/emojis/51219-applicationunderreview-ids.png')
+			.setTimestamp();
+	}
+
+	private attachmentUploadSuccessEmbed() {
+		return new EmbedBuilder()
+			.setColor('Green')
+			.setDescription(
+				'### ✅ Your files have been uploaded successfully! \
+				\n> - React :x: to the message to delete your uploaded files. \n> - Remember to keep these files confidential and do not share them outside of this server.'
+			)
+			.setThumbnail('https://cdn3.emoji.gg/emojis/32040-successfulverification-ids.png');
 	}
 
 	private extractAttachmentsFromInteraction(interaction: Command.ChatInputCommandInteraction): Attachment[] {

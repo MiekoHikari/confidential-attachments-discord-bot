@@ -58,6 +58,17 @@ export class Appwrite {
 		return { mediaItem, row };
 	}
 
+	public async updateMediaItemMessageId(itemId: string, messageId: string) {
+		return await this.tablesDb.updateRow<Items>({
+			databaseId: this.config.databaseId,
+			tableId: 'media_items',
+			rowId: itemId,
+			data: {
+				messageId: messageId
+			}
+		});
+	}
+
 	private async createMediaItemRow(mediaItem: MediaItem, context: { guildId: string; channelId: string; authorId: string }) {
 		const rowId = ID.unique();
 
