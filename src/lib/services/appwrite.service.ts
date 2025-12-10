@@ -137,6 +137,16 @@ export class Appwrite {
 		return jobId;
 	}
 
+	public async fetchCompletedJob(jobId: string) {
+		return (
+			(await this.tablesDb.listRows<CompletedJobs>({
+				databaseId: this.config.databaseId,
+				tableId: 'completed_jobs',
+				queries: [Query.equal('jobId', jobId), Query.select(['uploadItem.*', 'jobId']), Query.limit(1)]
+			})) ?? null
+		).rows[0];
+	}
+
 	public async createAccessLogEntry(userId: string, item: Items, completedJobRowId: string, type: AccessLogsAccessType) {
 		const rowId = ID.unique();
 

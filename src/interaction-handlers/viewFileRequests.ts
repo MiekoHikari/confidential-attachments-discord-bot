@@ -33,21 +33,21 @@ export class ButtonHandler extends InteractionHandler {
 			await this.container.appwrite.createWatermarkJob(interaction.user.id, File.file, File.metadata, item.$id);
 		}
 
-		await this.container.appwrite.createAccessLogEntry(
+		const log = await this.container.appwrite.createAccessLogEntry(
 			interaction.user.id,
 			item,
 			latestRecord.completedJob.$id,
 			AccessLogsAccessType.REPEAT_VIEW
 		);
 
-		const processedFile = await this.container.appwrite.getProcessedJob(latestRecord.completedJob.jobId);
+		const processedFile = await this.container.appwrite.getProcessedJob(log.completedJob.jobId);
 		if (!processedFile)
 			throw new UserError(
-				generateFailure(ErrorCodes.FileNotFound, { errors: [`Processed file for job ID ${latestRecord.completedJob.jobId} not found.`] })
+				generateFailure(ErrorCodes.FileNotFound, { errors: [`Processed file for job ID ${log.completedJob.jobId} not found.`] })
 			);
 
 		const attachment = new AttachmentBuilder(processedFile.buffer, {
-			name: `${latestRecord.$id}.${processedFile.contentType.split('/').pop()}`
+			name: `${log.$id}.${processedFile.contentType.split('/').pop()}`
 		});
 
 		return await interaction.editReply({
