@@ -10,14 +10,18 @@
 - [ ] Auto refresh job status with polling until interaction limit
 - [ ] Add Clarity on re-watermarking after expiry
 - [ ] Remove file name from buttons
+- [ ] /help about command
+- [ ] Command to list down all of user's uploads
 
 ## 🟢 Medium Priority (Features)
 - [ ] Before sending to channel, require user prompt
 - [ ] Implement Files Deleting with Context Command
 - [ ] Manage Storage usage for both blob and appwrite (Keep it seperate)
+- [ ] Message Listener to delete related database records if message is forcibly deleted
 
 ## 🔵 Low Priority (Admin Tools)
 - [ ] Per-server configuration for logging channels
 - [ ] Add tracing tools for administrators and decoders
 - [ ] Better logging for error tracing
+- [ ] /help status command to show the state of all the available cams servers rn
 - [ ] Experiment with webhooks and buttons
