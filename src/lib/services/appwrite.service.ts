@@ -3,9 +3,9 @@ import { ErrorCodes, generateFailure } from './errors.service';
 import { Client, ID, Models, Query, Storage, TablesDB } from 'node-appwrite';
 import { Attachment } from 'discord.js';
 import { AccessLogs, AccessLogsAccessType, CompletedJobs, Items, ItemsType } from '#lib/types/appwrite';
-import { encodeId } from './crypto.service';
 import { watermarkJob, watermarkQueue } from './messageQueue.service';
 import { ContainerClient } from '@azure/storage-blob';
+import { encodeId } from '#lib/utils';
 
 interface AppwriteServiceConfig {
 	endPoint: string;
