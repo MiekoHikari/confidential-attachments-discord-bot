@@ -77,6 +77,17 @@ export class Appwrite {
 		});
 	}
 
+	public async bulkUpdateMediaItemMessageIds(itemIds: string[], messageId: string) {
+		return await this.tablesDb.updateRows<Items>({
+			databaseId: this.config.databaseId,
+			tableId: 'media_items',
+			queries: [Query.contains('$id', itemIds)],
+			data: {
+				messageId: messageId
+			}
+		});
+	}
+
 	public async getMediaItemById(rowId: string) {
 		return (
 			(await this.tablesDb.getRow<Items>({

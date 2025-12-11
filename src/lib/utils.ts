@@ -2,7 +2,18 @@ import type { ChatInputCommandSuccessPayload, Command, ContextMenuCommandSuccess
 import { container } from '@sapphire/framework';
 import { send } from '@sapphire/plugin-editable-commands';
 import { cyan } from 'colorette';
-import { EmbedBuilder, type APIUser, type Guild, type Message, type User } from 'discord.js';
+import {
+	ActionRowBuilder,
+	Attachment,
+	ButtonBuilder,
+	ButtonStyle,
+	EmbedBuilder,
+	MessageActionRowComponentBuilder,
+	type APIUser,
+	type Guild,
+	type Message,
+	type User
+} from 'discord.js';
 import { RandomLoadingMessage } from './constants';
 
 /**
@@ -87,4 +98,29 @@ export function decodeId(encoded: string): string {
 		num = num * 62n + BigInt(BASE62_CHARS.indexOf(char));
 	}
 	return num.toString();
+}
+
+export function generateButtonComponentsfromAttachments(attachments: Attachment[], itemIds: string[]) {
+	if (attachments.length !== itemIds.length) return [];
+	if (attachments.length === 0) return [];
+
+	const actionRows: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
+
+	for (let i = 0; i < attachments.length; i += 5) {
+		const actionRow = new ActionRowBuilder<MessageActionRowComponentBuilder>();
+		const chunk = attachments.slice(i, i + 5);
+
+		for (const attachment of chunk) {
+			const button = new ButtonBuilder()
+				.setLabel(attachment.name)
+				.setCustomId(`viewFile#${attachment.id}`)
+				.setStyle(ButtonStyle.Secondary)
+				.setEmoji('📎');
+			actionRow.addComponents(button);
+		}
+
+		actionRows.push(actionRow);
+	}
+
+	return actionRows;
 }

@@ -1,9 +1,9 @@
 import { maxFileSizeInBytes, validExtensions, validImageTypes, validVideoTypes } from '#lib/constants';
 import { ErrorCodes, generateFailure } from '#lib/services/errors.service';
-import { ItemsType } from '#lib/types/appwrite';
+import { generateButtonComponentsfromAttachments } from '#lib/utils';
 import { ApplyOptions } from '@sapphire/decorators';
 import { Command, UserError } from '@sapphire/framework';
-import { ActionRowBuilder, Attachment, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageActionRowComponentBuilder } from 'discord.js';
+import { APIEmbedField, Attachment, EmbedBuilder } from 'discord.js';
 
 @ApplyOptions<Command.Options>({
 	description: 'Upload images/videos as confidential attachments',
@@ -48,28 +48,42 @@ export class UserCommand extends Command {
 				throw new UserError(generateFailure(ErrorCodes.UploadFailed, { errors: attachmentErrors }));
 			}
 
-			await interaction.editReply({ embeds: [this.attachmentUploadWarningEmbed()], components: [] });
+			const warningEmbedFields = attachments.map<APIEmbedField>((attachment, index) => ({
+				name: `⬛ File ${index + 1}: ${attachment.name}`,
+				value: `> - Size: ${(attachment.size / (1024 * 1024)).toFixed(2)} MB \n> - Type: ${attachment.contentType}`,
+				inline: false
+			}));
+			const warningEmbed = this.attachmentUploadWarningEmbed();
 
-			const uploadResult = await this.container.appwrite.uploadConfidentialMedia(attachments[0], {
-				guildId: interaction.guildId!,
-				authorId: interaction.user.id,
-				channelId: interaction.channelId!
-			});
+			warningEmbed.setFields(warningEmbedFields);
+			await interaction.editReply({ embeds: [warningEmbed], components: [] });
 
-			const actionRow1 = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-				new ButtonBuilder()
-					.setLabel(attachments[0].name)
-					.setCustomId(`viewFile#${uploadResult.row.$id}`)
-					.setStyle(ButtonStyle.Secondary)
-					.setEmoji(uploadResult.mediaItem.type === ItemsType.IMAGE ? '🖼️' : '🎬')
-			);
+			let uploadedMediaItemIds: string[] = [];
+			for (const [index, attachment] of attachments.entries()) {
+				warningEmbedFields[index].name = `🟨 File ${index + 1}: ${attachment.name}`;
+				await interaction.editReply({ embeds: [warningEmbed], components: [] });
+
+				const uploadResult = await this.container.appwrite.uploadConfidentialMedia(attachments[0], {
+					guildId: interaction.guildId!,
+					authorId: interaction.user.id,
+					channelId: interaction.channelId!
+				});
+
+				uploadedMediaItemIds.push(uploadResult.row.$id);
+
+				warningEmbedFields[index].name = `✅ File ${index + 1}: ${attachment.name}`;
+				await interaction.editReply({ embeds: [warningEmbed], components: [] });
+				await new Promise((resolve) => setTimeout(resolve, 1000)); // Small delay to avoid rate limits
+			}
+
+			const actionRows = generateButtonComponentsfromAttachments(attachments, uploadedMediaItemIds);
 
 			const message = await interaction.channel.send({
-				components: [actionRow1],
+				components: actionRows,
 				embeds: [this.attachmentAnnounceEmbed(interaction.user.id, attachments.length)]
 			});
 
-			await this.container.appwrite.updateMediaItemMessageId(uploadResult.row.$id, message.id);
+			await this.container.appwrite.bulkUpdateMediaItemMessageIds(uploadedMediaItemIds, message.id);
 
 			return await interaction.editReply({ embeds: [this.attachmentUploadSuccessEmbed()], components: [] });
 		} catch (error) {
