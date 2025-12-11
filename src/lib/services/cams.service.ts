@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageActionRowComponentBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageActionRowComponentBuilder } from 'discord.js';
 
 export const refreshButtonRow = (jobId: string) => new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(refreshButton(jobId));
 
