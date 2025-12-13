@@ -1,6 +1,7 @@
 # TODO
 
 ## 🔴 Critical (Bugs & Core Functionality)
+- [ ] Handle LARGE file uploads by creating a new upload queue
 - [ ] Expand upload command to support 10 attachments
 - [ ] File Cleanup on Error
 - [ ] Clearer Error Handling
