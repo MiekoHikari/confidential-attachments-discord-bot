@@ -6,6 +6,7 @@ import { AccessLogs, AccessLogsAccessType, CompletedJobs, Items, ItemsType } fro
 import { watermarkJob, watermarkQueue } from './messageQueue.service';
 import { ContainerClient } from '@azure/storage-blob';
 import { encodeId } from '#lib/utils';
+import { InputFile } from 'node-appwrite/file';
 
 interface AppwriteServiceConfig {
 	endPoint: string;
@@ -52,7 +53,7 @@ export class Appwrite {
 		const isDuplicate = await this.checkDuplicateHash(itemHash, context.guildId, context.authorId);
 		if (isDuplicate) throw new UserError(generateFailure(ErrorCodes.DuplicateFileError, { fileName: attachment.name || 'unknown' }));
 
-		const storageItem = await this.uploadToStorage(fileBuffer, attachment.name, attachment.contentType);
+		const storageItem = await this.uploadToStorage(fileBuffer, attachment.name);
 
 		const mediaItem: MediaItem = {
 			storageFileId: storageItem.id,
@@ -78,14 +79,18 @@ export class Appwrite {
 	}
 
 	public async bulkUpdateMediaItemMessageIds(itemIds: string[], messageId: string) {
-		return await this.tablesDb.updateRows<Items>({
-			databaseId: this.config.databaseId,
-			tableId: 'media_items',
-			queries: [Query.contains('$id', itemIds)],
-			data: {
-				messageId: messageId
+		try {
+			const rows = [];
+
+			for (const itemId of itemIds) {
+				const row = await this.updateMediaItemMessageId(itemId, messageId);
+				rows.push(row);
 			}
-		});
+
+			return rows;
+		} catch (error) {
+			return false;
+		}
 	}
 
 	public async getMediaItemById(rowId: string) {
@@ -227,15 +232,13 @@ export class Appwrite {
 		});
 	}
 
-	private async uploadToStorage(fileBuffer: Buffer, fileName?: string | null, contentType?: string | null) {
+	private async uploadToStorage(fileBuffer: Buffer, fileName?: string | null) {
 		const fileId = ID.unique();
-
-		const file = Appwrite.bufferToFile(fileBuffer, fileName || 'unknown', contentType || 'application/octet-stream');
 
 		const result = await this.storageClient.createFile({
 			bucketId: this.config.bucketId,
 			fileId: fileId,
-			file: file
+			file: InputFile.fromBuffer(fileBuffer, fileName || 'untitled')
 		});
 
 		return { id: result.$id };
@@ -263,7 +266,7 @@ export class Appwrite {
 		return null;
 	}
 
-	public static async getAttachmentBuffer(attachment: Attachment): Promise<Buffer<ArrayBufferLike>> {
+	public static async getAttachmentBuffer(attachment: Attachment) {
 		const response = await fetch(attachment.url);
 
 		if (!response.ok) {
